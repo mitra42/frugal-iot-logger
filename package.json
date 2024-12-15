@@ -10,7 +10,7 @@
   "dependencies": {
     "async": "^3.2.6",
     "js-yaml": "^4.1.0",
-    "mqtt": "^5.10.1",
+    "mqtt": "^5.10.1"
   },
   "repository": "https://github.com/mitra42/frugal-iot-logger",
   "type": "module"
