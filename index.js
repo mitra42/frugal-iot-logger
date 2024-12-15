@@ -147,16 +147,16 @@ class MqttLogger {
     // Read configuration file and return object
     async.waterfall([
         (cb) => readFile(inputFilePathOrDescriptor, 'utf8', cb),
-        (yamldata, cb) => cb(null, yaml.loadAll(yamldata, {onWarning: (warn) => console.log('Yaml warning:', warn)})),
+        (yamldata, cb) => cb(null, yaml.load(yamldata, {onWarning: (warn) => console.log('Yaml warning:', warn)})),
         (config, cb) => { this.config = config; cb(null, config); }
       ],
       cb
     );
   }
-  startLogger() {
+  start() {
     // noinspection JSUnresolvedReference
-    for (let o of config.organizations) {
-      let c = new MqttOrganization(o, config.mqtt); // Will subscribe when connects
+    for (let o of this.config.organizations) {
+      let c = new MqttOrganization(o, this.config.mqtt); // Will subscribe when connects
       this.clients.push(c);
       c.startClient();
     }
