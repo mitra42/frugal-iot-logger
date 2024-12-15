@@ -1,0 +1,7 @@
+{
+  "dependencies": {
+    "frugal-iot-logger": "^1.0.0"
+  },
+  "private": true,
+  "type": "module"
+}
