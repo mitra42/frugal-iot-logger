@@ -10,14 +10,11 @@ which is mosquitto running at ws://naturalinnovation.org:9012
 
 ### Example of usage with expressjs 
 
-The main example of the loggers use - that we test against - is currently 
-in the main Frugal-IoT repo at 
-https://github.com/mitra42/frugal-iot/blob/main/html/server/Main.js
+The main example of the loggers use - that we test against - is in the 
+[frugal-iot-server repo](https://github.com/mitra42/frugal-iot-server)
 
 This combines this Logger with a simple HTTP server to serve up the 
 logged data and user interface.
-
-This may move to its own repo frugal-iot-server at some point. 
 
 ### To install As a standalone server
 
