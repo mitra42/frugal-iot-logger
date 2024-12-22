@@ -1,7 +1,9 @@
+// noinspection JSAssignmentUsedAsCondition
+
 /*
  * Basic Logger for the Frugal IoT project
  *
- * Intended to be run as part of a HTTP server but could be run standalone
+ * Intended to be run as part of an HTTP server but could be run standalone
  *
  */
 
@@ -27,7 +29,8 @@ class MqttOrganization {
     this.config_mqtt = config_mqtt; // { broker }
     this.mqtt_client = null; // Object from library
     this.subscriptions = []; // [{topic, qos, cb(topic, message)}]
-    this.status = "constructing";
+    // noinspection JSUnusedGlobalSymbols
+    this.status = "constructing"; // Note that the status isn't currently available anywhere
   }
 
   mqtt_status_set(k) {
@@ -83,6 +86,7 @@ class MqttOrganization {
   }
 
   mqtt_subscribe(topic, qos) {
+    console.log("Subscribing topic", topic, qos);
     this.mqtt_client.subscribe(topic, {qos: qos}, this.subErr);
   }
 
@@ -174,11 +178,11 @@ class MqttOrganization {
 class MqttLogger {
   constructor() {
     this.clients = [];
-    let config;
   }
   // TODO The readYamlConfig probably belongs elsewhere, like in the caller.
   readYamlConfig(inputFilePathOrDescriptor, cb) {
     // Read configuration file and return object
+    // noinspection JSUnusedGlobalSymbols
     async.waterfall([
         (cb) => readFile(inputFilePathOrDescriptor, 'utf8', cb),
         (yamldata, cb) => cb(null, yaml.load(yamldata, {onWarning: (warn) => console.log('Yaml warning:', warn)})),
