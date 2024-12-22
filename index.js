@@ -1,4 +1,4 @@
-// noinspection JSAssignmentUsedAsCondition
+// noinspection JSAssignmentUsedAsCondition,JSUnresolvedReference
 
 /*
  * Basic Logger for the Frugal IoT project
@@ -19,12 +19,32 @@ function sanitizeUrl(t) {
   return (t.replaceAll("../",""));
 }
 
+// Functions on config structures - see more in frugal-iot-client
+// Find where in o (config at the organizational level) is the most detailed response e.g. the field on the project will be overridden by one on a topic.
+function findMostGranular(o, topicpath, field) {
+  // noinspection JSUnusedLocalSymbols
+  let [unusedOrg, project, node, topic] = topicpath.split('/');
+  let p,n,t,f;
+  if (p = o.projects[project]) {
+    if (n = p.nodes[node]) {
+      if (t = n.topics[topic]) {
+        if (f = t[field]) { return f; }
+      }
+      if (f = n[field]) { return f; }
+    }
+    if (f = p[field]) { return f; }
+  }
+  if (o[field]) { return f;}
+  return null;
+}
+
 
 // ================== MQTT Client embedded in server ========================
 
 // Manages a connection to a broker - each organization needs its own connection
 class MqttOrganization {
-  constructor(config_org, config_mqtt) {
+  constructor(name, config_org, config_mqtt) {
+    this.name = name;
     this.config_org = config_org; // Config structure currently: { name, mqtt_password, projects[ {name, track[]}]}
     this.config_mqtt = config_mqtt; // { broker }
     this.mqtt_client = null; // Object from library
@@ -34,7 +54,7 @@ class MqttOrganization {
   }
 
   mqtt_status_set(k) {
-    console.log('mqtt', this.config_org.name, k);
+    console.log('mqtt', this.name, k);
     this.status = k;
   }
 
@@ -47,7 +67,7 @@ class MqttOrganization {
       // noinspection JSUnresolvedReference
       this.mqtt_client = mqtt.connect(this.config_mqtt.broker, {
         connectTimeout: 5000,
-        username: this.config_org.userid || this.config_org.name,
+        username: this.config_org.userid || this.name,
         password: this.config_org.mqtt_password,
         // Remainder do not appear to be needed
         //hostname: "127.0.0.1",
@@ -97,12 +117,13 @@ class MqttOrganization {
 
   configSubscribe() {
     // noinspection JSUnresolvedReference
-    for (let p of this.config_org.projects) {
-      for (let n of p.nodes) { // Note that node could have name of '+' for tracking all of them
-        for (let t of n.track) {
-          let topic = `${this.config_org.name}/${p.name}/${n.id}/${t}`;
-          // TODO-server for now its a generic messageReceived - may need some kind of action - for example if Config had a "control" rule
-          this.subscribe(topic, 0, this.messageReceived.bind(this)); // TODO-66 think about QOS, add optional in YAML
+    let o = this.config_org;
+    for (let [pname,p] of Object.entries(o.projects)) {
+      for (let [nname, n] of Object.entries(p.nodes)) { // Note that node could have name of '+' for tracking all of them
+        for (let tname of Object.keys(n.topics)) {
+          let topicpath = `${this.name}/${pname}/${nname}/${tname}`;
+          // TODO-logger for now its a generic messageReceived - may need some kind of action - for example if Config had a "control" rule
+          this.subscribe(topicpath, 0, this.messageReceived.bind(this)); // TODO-66 think about QOS, add optional in YAML
         }
       }
     }
@@ -121,31 +142,9 @@ class MqttOrganization {
       }
     }
   }
-  // Find where in the config is the most detailed response e.g. the field on the project will be overridden by one on a topic.
-  findMostGranular(topicpath, field) {
-    // noinspection JSUnusedLocalSymbols
-    let [org, project, node, topic] = topicpath.split('/');
-    let o = this.config_org;
-    let p,n,t,f;
-    // noinspection JSUnresolvedReference
-    if (p = o.projects.find((pp) => pp.name === project)) {
-      if (n = p.nodes.find((nn) => nn.id === node)) {
-        /* TODO-4 when reorganize then could have a field on a track
-        if (t = n.track.find((nn) => nn.name === topic) {
-          [topic]) {
-          if (f = t[field]) { return f; }
-        }
-        */
-        if (f = n[field]) { return f; }
-      }
-      if (f = p[field]) { return f; }
-    }
-    if (o[field]) { return f;}
-    return null;
-  }
   duplicate(topic, message) {
     // First find the duplicate rules for the topic
-    let rules = this.findMostGranular(topic, "duplicates");
+    let rules = findMostGranular(this.config_org, topic, "duplicates");
     console.log("xxx rules for ", topic, "=", rules);
     // TODO-3 found rules above, now apply them, then add more complex ones
     return false;
@@ -193,8 +192,8 @@ class MqttLogger {
   }
   start() {
     // noinspection JSUnresolvedReference
-    for (let o of this.config.organizations) {
-      let c = new MqttOrganization(o, this.config.mqtt); // Will subscribe when connects
+    for (let [oname, oconfig] of Object.entries(this.config.organizations)) {
+      let c = new MqttOrganization(oname, oconfig, this.config.mqtt); // Will subscribe when connects
       this.clients.push(c);
       c.startClient();
     }

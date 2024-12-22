@@ -4,20 +4,19 @@ server:
 mqtt:
   broker: ws://naturalinnovation.org:9012
 organizations:
-  - name: dev
+  dev:
     mqtt_password: public
+    name: Development
     projects:
-      - name: Lotus Ponds
+      Lotus Ponds:
         duplicates:
           time: true
         nodes:
-          - id: esp8266-85ea2b
-            track:
-            - temperature
-            - humidity
-          - id: esp8266-95a754
-            track:
-              - temperature
-              - humidity
-
-
+          esp8266-85ea2b:
+            topics:
+              temperature:
+              humidity:
+          esp8266-95a754:
+            topics:
+              temperature:
+              humidity:
