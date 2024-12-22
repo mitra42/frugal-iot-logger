@@ -8,6 +8,8 @@ organizations:
     mqtt_password: public
     projects:
       - name: Lotus Ponds
+        duplicates:
+          time: true
         nodes:
           - id: esp8266-85ea2b
             track:

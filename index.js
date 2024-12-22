@@ -117,11 +117,40 @@ class MqttOrganization {
       }
     }
   }
-
-  messageReceived(topic, message) {
-    this.log(topic, message);
+  // Find where in the config is the most detailed response e.g. the field on the project will be overridden by one on a topic.
+  findMostGranular(topicpath, field) {
+    // noinspection JSUnusedLocalSymbols
+    let [org, project, node, topic] = topicpath.split('/');
+    let o = this.config_org;
+    let p,n,t,f;
+    // noinspection JSUnresolvedReference
+    if (p = o.projects.find((pp) => pp.name === project)) {
+      if (n = p.nodes.find((nn) => nn.id === node)) {
+        /* TODO-4 when reorganize then could have a field on a track
+        if (t = n.track.find((nn) => nn.name === topic) {
+          [topic]) {
+          if (f = t[field]) { return f; }
+        }
+        */
+        if (f = n[field]) { return f; }
+      }
+      if (f = p[field]) { return f; }
+    }
+    if (o[field]) { return f;}
+    return null;
   }
-
+  duplicate(topic, message) {
+    // First find the duplicate rules for the topic
+    let rules = this.findMostGranular(topic, "duplicates");
+    console.log("xxx rules for ", topic, "=", rules);
+    // TODO-3 found rules above, now apply them, then add more complex ones
+    return false;
+  }
+  messageReceived(topic, message) {
+    if (!this.duplicate(topic, message)) {
+      this.log(topic, message);
+    }
+  }
   log(topic, message) {
     let path = `data/${sanitizeUrl(topic)}`;
     let dateNow = new Date();
