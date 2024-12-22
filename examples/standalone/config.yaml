@@ -8,7 +8,8 @@ organizations:
     mqtt_password: public
     name: Development
     projects:
-      Lotus Ponds:
+      lotus:
+        name: Lotus Ponds
         duplicates:
           time: true
         nodes:
@@ -20,3 +21,6 @@ organizations:
             topics:
               temperature:
               humidity:
+          esp32-3c7ab8:
+            topics:
+              battery:

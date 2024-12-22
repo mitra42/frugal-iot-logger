@@ -43,9 +43,9 @@ function findMostGranular(o, topicpath, field) {
 
 // Manages a connection to a broker - each organization needs its own connection
 class MqttOrganization {
-  constructor(name, config_org, config_mqtt) {
-    this.name = name;
-    this.config_org = config_org; // Config structure currently: { name, mqtt_password, projects[ {name, track[]}]}
+  constructor(id, config_org, config_mqtt) {
+    this.id = id;
+    this.config_org = config_org; // Config structure currently: { name, mqtt_password, projects: { id: { topics: { temperature , humidity }
     this.config_mqtt = config_mqtt; // { broker }
     this.mqtt_client = null; // Object from library
     this.subscriptions = []; // [{topic, qos, cb(topic, message)}]
@@ -54,7 +54,7 @@ class MqttOrganization {
   }
 
   mqtt_status_set(k) {
-    console.log('mqtt', this.name, k);
+    console.log('mqtt', this.id, k);
     this.status = k;
   }
 
@@ -67,7 +67,7 @@ class MqttOrganization {
       // noinspection JSUnresolvedReference
       this.mqtt_client = mqtt.connect(this.config_mqtt.broker, {
         connectTimeout: 5000,
-        username: this.config_org.userid || this.name,
+        username: this.config_org.userid || this.id,
         password: this.config_org.mqtt_password,
         // Remainder do not appear to be needed
         //hostname: "127.0.0.1",
@@ -118,10 +118,10 @@ class MqttOrganization {
   configSubscribe() {
     // noinspection JSUnresolvedReference
     let o = this.config_org;
-    for (let [pname,p] of Object.entries(o.projects)) {
-      for (let [nname, n] of Object.entries(p.nodes)) { // Note that node could have name of '+' for tracking all of them
-        for (let tname of Object.keys(n.topics)) {
-          let topicpath = `${this.name}/${pname}/${nname}/${tname}`;
+    for (let [pid,p] of Object.entries(o.projects)) {
+      for (let [nid, n] of Object.entries(p.nodes)) { // Note that node could have name of '+' for tracking all of them
+        for (let tid of Object.keys(n.topics)) {
+          let topicpath = `${this.id}/${pid}/${nid}/${tid}`;
           // TODO-logger for now its a generic messageReceived - may need some kind of action - for example if Config had a "control" rule
           this.subscribe(topicpath, 0, this.messageReceived.bind(this)); // TODO-66 think about QOS, add optional in YAML
         }
@@ -192,8 +192,8 @@ class MqttLogger {
   }
   start() {
     // noinspection JSUnresolvedReference
-    for (let [oname, oconfig] of Object.entries(this.config.organizations)) {
-      let c = new MqttOrganization(oname, oconfig, this.config.mqtt); // Will subscribe when connects
+    for (let [oid, oconfig] of Object.entries(this.config.organizations)) {
+      let c = new MqttOrganization(oid, oconfig, this.config.mqtt); // Will subscribe when connects
       this.clients.push(c);
       c.startClient();
     }
