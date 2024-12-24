@@ -38,7 +38,70 @@ function findMostGranular(o, topicpath, field) {
   return null;
 }
 
+class Subscription {
+  constructor(topic, qos, cb, duplicates, type) {
+    this.topic = topic;
+    this.qos = qos;
+    this.type = type;
+    this.cb = cb;
+    this.lastdate = {};
+    this.lastvalue = {};
+    this.duplicates = duplicates; // Rules to follow
+  }
+  matches(topic) {
+    if (this.topic.includes('+')) {
+      function m(x,y) { return (x === y) || (y === '+')}
+      let [ o,p,n,t] = topic.split('/');
+      let [ os,ps,ns,ts] = this.topic.split('/');
+      return m(o,os) && m(p,ps) && m(n,ns) && m(t,ts);
+    } else {
+      return this.topic === topic;
+    }
+  }
+  isDuplicate(date, topic, value) {
+    let rules = this.duplicates;
+    let ld = this.lastdate[topic] || 0;
+    let lv = this.lastvalue[topic] || 0;
+    if ((date === ld) && (value === lv)) return true; // Eliminate any exact duplicates
+    if (rules.significantvalue && (Math.abs(value - lv) > rules.significantvalue)) { return false; }
+    if (rules.significantdate && ((date-ld) > rules.significantdate)) { return false; }
+    if (rules.significantdate || rules.significantvalue) { return true; } // Conditions but didn't meet any of them
+    return false; // No conditions
+  }
 
+  dispatch(topic, message) {
+    // Dispatch, but don't dispatch duplicates
+    // TODO-3 note this can get called when the subscription is a wildcard so record lastdate against multiple topics
+    let value = this.valueFromText(message);
+    let date = new Date();
+    if (!this.isDuplicate(date, topic, value)) {
+      this.lastdate[topic] = date;
+      this.lastvalue[topic] = value;
+      this.cb(date, topic, message);
+    }
+  }
+
+  // NOTE same function in frugal-iot-logger and frugal-iot-client if change here, change there
+  valueFromText(message) {
+    switch(this.type) {
+      case "bool":
+        return toBool(message);
+      case "float":
+        return Number(message)
+      case "int":
+        return Number(message)
+      case "topic":
+        return message;
+      case "text":
+        return message;
+      case "yaml":
+        // noinspection JSUnusedGlobalSymbols
+        return yaml.load(message, {onWarning: (warn) => console.log('Yaml warning:', warn)});
+      default:
+        console.error(`Unrecognized message type: ${this.type}`);
+    }
+  }
+}
 // ================== MQTT Client embedded in server ========================
 
 // Manages a connection to a broker - each organization needs its own connection
@@ -48,7 +111,6 @@ class MqttOrganization {
     this.config_org = config_org; // Config structure currently: { name, mqtt_password, projects: { id: { topics: { temperature , humidity }
     this.config_mqtt = config_mqtt; // { broker }
     this.mqtt_client = null; // Object from library
-    this.subscriptions = []; // [{topic, qos, cb(topic, message)}]
     // noinspection JSUnusedGlobalSymbols
     this.status = "constructing"; // Note that the status isn't currently available anywhere
   }
@@ -112,18 +174,23 @@ class MqttOrganization {
 
   subscribe(topic, qos, cb) {
     this.mqtt_subscribe(topic, qos);
-    this.subscriptions.push({topic, qos, cb});
+    let duplicates = findMostGranular(this.config_org, topic, "duplicates");
+    let type = findMostGranular(this.config_org, topic, "type"); // TODO-3 need to handle wild card in findMostGranular
+    this.subscriptions.push(new Subscription(topic, qos, cb, duplicates, type));
   }
 
   configSubscribe() {
     // noinspection JSUnresolvedReference
-    let o = this.config_org;
-    for (let [pid,p] of Object.entries(o.projects)) {
-      for (let [nid, n] of Object.entries(p.nodes)) { // Note that node could have name of '+' for tracking all of them
-        for (let tid of Object.keys(n.topics)) {
-          let topicpath = `${this.id}/${pid}/${nid}/${tid}`;
-          // TODO-logger for now its a generic messageReceived - may need some kind of action - for example if Config had a "control" rule
-          this.subscribe(topicpath, 0, this.messageReceived.bind(this)); // TODO-66 think about QOS, add optional in YAML
+    if (!this.subscriptions) {
+      this.subscriptions = [];
+      let o = this.config_org;
+      for (let [pid, p] of Object.entries(o.projects)) {
+        for (let [nid, n] of Object.entries(p.nodes)) { // Note that node could have name of '+' for tracking all of them
+          for (let tid of Object.keys(n.topics)) {
+            let topicpath = `${this.id}/${pid}/${nid}/${tid}`;
+            // TODO-logger for now its a generic messageReceived - may need some kind of action - for example if Config had a "control" rule
+            this.subscribe(topicpath, 0, this.messageReceived.bind(this)); // TODO-66 think about QOS, add optional in YAML
+          }
         }
       }
     }
@@ -134,33 +201,18 @@ class MqttOrganization {
       this.mqtt_subscribe(sub.topic, sub.qos);
     }
   }
-
   dispatch(topic, message) {
-    for (let sub of this.subscriptions) {
-      if (sub.topic === topic) {
-        sub.cb(topic, message);
-      }
-    }
+    this.subscriptions.filter(s => s.matches(topic)).forEach(s => s.dispatch(topic, message));
   }
-  duplicate(topic, message) {
-    // First find the duplicate rules for the topic
-    let rules = findMostGranular(this.config_org, topic, "duplicates");
-    console.log("xxx rules for ", topic, "=", rules);
-    // TODO-3 found rules above, now apply them, then add more complex ones
-    return false;
+  // Called by s.dispatch, currently all the same
+  messageReceived(date, topic, message) {
+      this.log(date, topic, message);
   }
-  messageReceived(topic, message) {
-    if (!this.duplicate(topic, message)) {
-      this.log(topic, message);
-    }
-  }
-  log(topic, message) {
+  log(date, topic, message) {
     let path = `data/${sanitizeUrl(topic)}`;
-    let dateNow = new Date();
-    let filename = `${dateNow.toISOString().substring(0, 10)}.csv`
-    this.appendPathFile(path, filename, `${dateNow.valueOf()},"${message}"\n`);
+    let filename = `${date.toISOString().substring(0, 10)}.csv`
+    this.appendPathFile(path, filename, `${date.valueOf()},"${message}"\n`);
   }
-
   appendPathFile(path, filename, message) {
     mkdir(path, {recursive: true}, (err/*, val*/) => {
       if (err) {

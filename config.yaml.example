@@ -10,17 +10,23 @@ organizations:
     projects:
       lotus:
         name: Lotus Ponds
-        duplicates:
-          time: true
         nodes:
-          esp8266-85ea2b:
+          +:
             topics:
-              temperature:
               humidity:
-          esp8266-95a754:
-            topics:
+                type: float
+                duplicates:
+                  significantdate: 900000
+                  significantvalue: 1
               temperature:
-              humidity:
+                type: float
+                duplicates:
+                  significantdate: 900000
+                  significantvalue: 1
           esp32-3c7ab8:
             topics:
               battery:
+                type: int
+                duplicates:
+                  significantdate: 900000
+                  significantvalue: 100
