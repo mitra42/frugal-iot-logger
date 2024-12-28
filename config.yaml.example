@@ -23,6 +23,11 @@ organizations:
                 duplicates:
                   significantdate: 900000
                   significantvalue: 1
+            soil:
+              type: int
+              duplicates:
+                significantdate: 900000
+                significantvalue: 1
           esp32-3c7ab8:
             topics:
               battery:

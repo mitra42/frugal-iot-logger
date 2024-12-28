@@ -4,7 +4,6 @@
     "email": "mitra@mitra.biz",
     "url": "https://www.mitra.biz"
   },
-  "browserslist": "> 20%, not dead",
   "bugs": "https://github.com/mitra42/frugal-iot-logger/issues",
   "dependencies": {
     "async": "^3.2.6",
