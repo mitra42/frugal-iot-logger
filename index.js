@@ -9,7 +9,7 @@
 
 import async from 'async'; // https://caolan.github.io/async/v3/docs.html
 import yaml from 'js-yaml'; // https://www.npmjs.com/package/js-yaml
-import { appendFile, mkdir, readFile } from "fs"; // https://nodejs.org/api/fs.html
+import { appendFile, mkdir, readFile, readdir } from "fs"; // https://nodejs.org/api/fs.html
 import mqtt from 'mqtt'; // https://www.npmjs.com/package/mqtt
 
 // =========== Some generic helper functions, not specific to this client ========
@@ -230,18 +230,78 @@ class MqttLogger {
   constructor() {
     this.clients = [];
   }
-  // TODO The readYamlConfig probably belongs elsewhere, like in the caller.
-  readYamlConfig(inputFilePathOrDescriptor, cb) {
-    // Read configuration file and return object
-    // noinspection JSUnusedGlobalSymbols
+
+  // This is a generic config reader that reads a config.yaml and a config.d directory
+  // It could be put in its own module
+  readConfigFromYamlFile(inputFilePath, cb) {
+    console.log("readYamlConfigFile", inputFilePath);
     async.waterfall([
-        (cb) => readFile(inputFilePathOrDescriptor, 'utf8', cb),
-        (yamldata, cb) => cb(null, yaml.load(yamldata, {onWarning: (warn) => console.log('Yaml warning:', warn)})),
-        (config, cb) => { this.config = config; cb(null, config); }
+        (cb1) => readFile(inputFilePath, 'utf8', cb1),
+        (yamldata, cb1) => cb1(null, yaml.load(yamldata, {onWarning: (warn) => console.log('Yaml warning:', warn)})),
       ],
       cb
     );
   }
+  readConfigFromDir(inputDirPath, cb) {
+    console.log("readYamlConfigDir", inputDirPath);
+    let config_d = {}; // Portion of total config
+    async.waterfall([
+      (cb1m) => readdir(inputDirPath, {withFileTypes: true}, cb1m),
+      (files, cb1n) => {
+        async.each(files, (file, cb2) => {
+          if (file.isDirectory()) {
+            this.readConfigFromDir(`${inputDirPath}/${file.name}`, (err, data) => { // Recursively read subdir
+              if (err) {
+                cb2(err);
+              } else {
+                let sub = file.name;
+                config_d[sub] = data;
+                cb2(null);
+              }
+            });
+          } else {
+            this.readConfigFromYamlFile(`${inputDirPath}/${file.name}`, (err, data) => {
+              if (err) {
+                cb2(err);
+              } else {
+                let sub = file.name.replace(/\.yaml$/, '');
+                config_d[sub] = data;
+                cb2(null);
+              }
+            });
+          }
+        }, cb1n);
+      },
+    ], (err) => cb(err, config_d));
+  }
+  readYamlConfig(inputDirPath, cb) {
+    async.waterfall([
+      (cb1a) => this.readConfigFromYamlFile(`${inputDirPath}/config.yaml`, cb1a),
+      (config, cb1b) => {
+        this.readConfigFromDir(`${inputDirPath}/config.d`, (err, config_d) => {
+          if (err) {
+            console.log(err); // Report it, but don't worry if dir doesnt exist
+            cb1b(null, config); // Just return the main config
+            // cb1b(err); // dont want an error from a non-existant `config.d`
+          } else {
+            Object.entries(config_d).forEach(([k, v]) => {
+              config[k] = v;
+            });
+            cb1b(null, config);
+          }
+        });
+      },
+    ], (err, config) => {
+      if (err) {
+        cb(err);
+      } else {
+        this.config = config;
+        cb(null, config);
+      }
+    });
+  }
+
+
   start() {
     // noinspection JSUnresolvedReference
     for (let [oid, oconfig] of Object.entries(this.config.organizations)) {

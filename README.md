@@ -21,7 +21,10 @@ logged data and user interface.
 Copy https://github.com/mitra42/frugal-iot-logger/examples/standalone
 (Or clone the repo, or `npm install frugal-iot-logger`)
 
-edit config.yaml # Make it match your hierarchy - note its fixed at 4 levels
+edit `config.yaml` 
+and in `config.d/organizations` put a yaml file for your org, using the example in 
+`examples/standalone/config.d/organizations/dev.yaml`
+Make it match your hierarchy but note its fixed at 4 levels   organization, project, node, topic
 ```
 node standalone.js
 ```

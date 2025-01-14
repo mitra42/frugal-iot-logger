@@ -8,7 +8,7 @@ import { MqttOrganization, MqttLogger } from "../../index.js";  // https://githu
 
 let mqttLogger = new MqttLogger();
 
-mqttLogger.readYamlConfig('./config.yaml', (err, configobj) => {
+mqttLogger.readYamlConfig('.', (err, configobj) => {
     console.log("Logger Config=",configobj);
     mqttLogger.start(); // TODO-84 rename to start
   });
