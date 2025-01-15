@@ -71,7 +71,7 @@ class Subscription {
 
   dispatch(topic, message) {
     // Dispatch, but don't dispatch duplicates
-    // TODO-3 note this can get called when the subscription is a wildcard so record lastdate against multiple topics
+    // TODO-3 note this can get called when the subscription is a wildcard so record last date against multiple topics
     let value = this.valueFromText(message);
     let date = new Date();
     if (!this.isDuplicate(date, topic, value)) {
@@ -280,9 +280,9 @@ class MqttLogger {
       (config, cb1b) => {
         this.readConfigFromDir(`${inputDirPath}/config.d`, (err, config_d) => {
           if (err) {
-            console.log(err); // Report it, but don't worry if dir doesnt exist
+            console.log(err); // Report it, but don't worry if dir does not exist
             cb1b(null, config); // Just return the main config
-            // cb1b(err); // dont want an error from a non-existant `config.d`
+            // cb1b(err); // dont want an error from a non-existent `config.d`
           } else {
             Object.entries(config_d).forEach(([k, v]) => {
               config[k] = v;
