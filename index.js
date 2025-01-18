@@ -38,8 +38,10 @@ function findMostGranular(o, topicpath, field) {
   return null;
 }
 
+// Class with one object per subscription including de-duplication rules.
+// Subscriptions are held under the Organization level, and can include wild-card subscriptions.
 class Subscription {
-  constructor(topic, qos, cb, duplicates, type) {
+  constructor(topic, qos, duplicates, type, cb) {
     this.topic = topic;
     this.qos = qos;
     this.type = type;
@@ -60,13 +62,15 @@ class Subscription {
   }
   isDuplicate(date, topic, value) {
     let rules = this.duplicates;
-    let ld = this.lastdate[topic] || 0;
-    let lv = this.lastvalue[topic] || 0;
-    if ((date === ld) && (value === lv)) return true; // Eliminate any exact duplicates
-    if (rules.significantvalue && (Math.abs(value - lv) > rules.significantvalue)) { return false; }
-    if (rules.significantdate && ((date-ld) > rules.significantdate)) { return false; }
-    if (rules.significantdate || rules.significantvalue) { return true; } // Conditions but didn't meet any of them
-    return false; // No conditions
+    if (rules) {
+      let ld = this.lastdate[topic] || 0;
+      let lv = this.lastvalue[topic] || 0;
+      if ((date === ld) && (value === lv)) return true; // Eliminate any exact duplicates
+      if (rules.significantvalue && (Math.abs(value - lv) > rules.significantvalue)) { return false; }
+      if (rules.significantdate && ((date-ld) > rules.significantdate)) { return false; }
+      if (rules.significantdate || rules.significantvalue) { return true; } // Conditions but didn't meet any of them
+    }
+    return false; // No conditions or no rules (e.g. for discovery at org/project=node
   }
 
   dispatch(topic, message) {
@@ -113,6 +117,7 @@ class MqttOrganization {
     this.mqtt_client = null; // Object from library
     // noinspection JSUnusedGlobalSymbols
     this.status = "constructing"; // Note that the status isn't currently available anywhere
+    this.projects = {};
   }
 
   mqtt_status_set(k) {
@@ -172,24 +177,37 @@ class MqttOrganization {
     this.mqtt_client.subscribe(topic, {qos: qos}, this.subErr);
   }
 
-  subscribe(topic, qos, cb) {
+  subscribe(topic, qos, duplicates, type, cb) {
     this.mqtt_subscribe(topic, qos);
-    let duplicates = findMostGranular(this.config_org, topic, "duplicates");
-    let type = findMostGranular(this.config_org, topic, "type"); // TODO-3 need to handle wild card in findMostGranular
-    this.subscriptions.push(new Subscription(topic, qos, cb, duplicates, type));
+    this.subscriptions.push(new Subscription(topic, qos, duplicates, type, cb));
   }
-
+  quickdiscover(date, topic, message) {
+    // Save a record of a quickdiscover message so we know when last seen
+    // topic = "orgid/projectid"  message = "nodeid"
+    let pid = topic.split('/')[1];
+    let nid = message;
+    if (!this.projects[pid]) { this.projects[pid] = {}; }
+    //console.log("XXX client11",pid,nid,date)
+    this.projects[pid][nid] = date;
+  }
+  watchProject(pid, p) {
+    // Things to do regarding the project, other than subscribing based on config
+    this.subscribe(`${this.id}/${pid}`, 0, null, "text", this.quickdiscover.bind(this));
+  }
   configSubscribe() {
     // noinspection JSUnresolvedReference
     if (!this.subscriptions) {
       this.subscriptions = [];
       let o = this.config_org;
       for (let [pid, p] of Object.entries(o.projects)) {
+        this.watchProject(pid, p);
         for (let [nid, n] of Object.entries(p.nodes)) { // Note that node could have name of '+' for tracking all of them
           for (let tid of Object.keys(n.topics)) {
             let topicpath = `${this.id}/${pid}/${nid}/${tid}`;
             // TODO-logger for now its a generic messageReceived - may need some kind of action - for example if Config had a "control" rule
-            this.subscribe(topicpath, 0, this.messageReceived.bind(this)); // TODO-66 think about QOS, add optional in YAML
+            let duplicates = findMostGranular(this.config_org, topicpath, "duplicates");
+            let type = findMostGranular(this.config_org, topicpath, "type"); // TODO-3 need to handle wild card in findMostGranular
+            this.subscribe(topicpath, 0, duplicates, type, this.messageReceived.bind(this)); // TODO-66 think about QOS, add optional in YAML
           }
         }
       }
@@ -228,9 +246,16 @@ class MqttOrganization {
 
 class MqttLogger {
   constructor() {
-    this.clients = [];
+    this.clients = {};
   }
 
+  reportNodes() {  // { org: { project: { node: date }}}
+    let report = {};
+    Object.entries(this.clients).forEach(([k,v]) => {
+      report[k] = this.clients[k].projects;
+    });
+    return report;
+  }
   // This is a generic config reader that reads a config.yaml and a config.d directory
   // It could be put in its own module
   readConfigFromYamlFile(inputFilePath, cb) {
@@ -306,7 +331,7 @@ class MqttLogger {
     // noinspection JSUnresolvedReference
     for (let [oid, oconfig] of Object.entries(this.config.organizations)) {
       let c = new MqttOrganization(oid, oconfig, this.config.mqtt); // Will subscribe when connects
-      this.clients.push(c);
+      this.clients[oid] = c;
       c.startClient();
     }
   }
