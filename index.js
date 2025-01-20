@@ -251,7 +251,7 @@ class MqttLogger {
 
   reportNodes() {  // { org: { project: { node: date }}}
     let report = {};
-    Object.entries(this.clients).forEach(([k,v]) => {
+    Object.entries(this.clients).forEach(([k,v]) => { // Loop over organizations
       report[k] = this.clients[k].projects;
     });
     return report;
