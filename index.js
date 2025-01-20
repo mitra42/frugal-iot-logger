@@ -21,20 +21,43 @@ function sanitizeUrl(t) {
 
 // Functions on config structures - see more in frugal-iot-client
 // Find where in o (config at the organizational level) is the most detailed response e.g. the field on the project will be overridden by one on a topic.
+function findMostGranularN(n, topicpath, field) {
+  // noinspection JSUnusedLocalSymbols
+  let [unusedOrg, unusedProject, node, topic] = topicpath.split('/');
+  let t,f;
+  if (t = n.topics[topic]) {
+    if (f = t[field]) { return f; }
+  }
+  if (t = n.topics['+']) {
+    if (f = t[field]) { return f; }
+  }
+  if (f = n[field]) { return f; }
+  return null;
+}
+function findMostGranularP(p, topicpath, field) {
+  // noinspection JSUnusedLocalSymbols
+  let [unusedOrg, unusedProject, node, topic] = topicpath.split('/');
+  let n,t,f;
+  if (n = p.nodes[node]) {
+    if (f = findMostGranularN(n, topicpath, field)) { return f; }
+  }
+  if (n = p.nodes['+']) {
+    if (f = findMostGranularN(n, topicpath, field)) { return f; }
+  }
+  if (f = p[field]) { return f; }
+  return null;
+}
 function findMostGranular(o, topicpath, field) {
   // noinspection JSUnusedLocalSymbols
   let [unusedOrg, project, node, topic] = topicpath.split('/');
   let p,n,t,f;
   if (p = o.projects[project]) {
-    if (n = p.nodes[node]) {
-      if (t = n.topics[topic]) {
-        if (f = t[field]) { return f; }
-      }
-      if (f = n[field]) { return f; }
-    }
-    if (f = p[field]) { return f; }
+    if (f = findMostGranularP(p, topicpath, field)) { return f; };
   }
-  if (o[field]) { return f;}
+  if (p = o.projects['+']) {
+    if (f = findMostGranularP(p, topicpath, field)) { return f; };
+  }
+  if (f = o[field]) { return f;}
   return null;
 }
 
@@ -75,7 +98,6 @@ class Subscription {
 
   dispatch(topic, message) {
     // Dispatch, but don't dispatch duplicates
-    // TODO-3 note this can get called when the subscription is a wildcard so record last date against multiple topics
     let value = this.valueFromText(message);
     let date = new Date();
     if (!this.isDuplicate(date, topic, value)) {
@@ -190,8 +212,10 @@ class MqttOrganization {
     //console.log("XXX client11",pid,nid,date)
     this.projects[pid][nid] = date;
   }
+  // noinspection JSUnusedLocalSymbols
   watchProject(pid, p) {
     // Things to do regarding the project, other than subscribing based on config
+    // Watch for quickdiscover messages and record last time node seen
     this.subscribe(`${this.id}/${pid}`, 0, null, "text", this.quickdiscover.bind(this));
   }
   configSubscribe() {
@@ -206,7 +230,7 @@ class MqttOrganization {
             let topicpath = `${this.id}/${pid}/${nid}/${tid}`;
             // TODO-logger for now its a generic messageReceived - may need some kind of action - for example if Config had a "control" rule
             let duplicates = findMostGranular(this.config_org, topicpath, "duplicates");
-            let type = findMostGranular(this.config_org, topicpath, "type"); // TODO-3 need to handle wild card in findMostGranular
+            let type = findMostGranular(this.config_org, topicpath, "type");
             this.subscribe(topicpath, 0, duplicates, type, this.messageReceived.bind(this)); // TODO-66 think about QOS, add optional in YAML
           }
         }
@@ -249,10 +273,12 @@ class MqttLogger {
     this.clients = {};
   }
 
+  // reportNodes is used by the frugal-iot-server to report the last seen date of each node
+  // noinspection JSUnusedGlobalSymbols
   reportNodes() {  // { org: { project: { node: date }}}
     let report = {};
     Object.entries(this.clients).forEach(([k,v]) => { // Loop over organizations
-      report[k] = this.clients[k].projects;
+      report[k] = v.projects;
     });
     return report;
   }

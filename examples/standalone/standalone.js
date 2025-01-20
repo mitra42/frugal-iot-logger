@@ -10,6 +10,6 @@ let mqttLogger = new MqttLogger();
 
 mqttLogger.readYamlConfig('.', (err, configobj) => {
     console.log("Logger Config=",configobj);
-    mqttLogger.start(); // TODO-84 rename to start
+    mqttLogger.start();
   });
 
