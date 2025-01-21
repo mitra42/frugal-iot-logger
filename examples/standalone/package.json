@@ -1,6 +1,6 @@
 {
   "dependencies": {
-    "frugal-iot-logger": "^1.0.0"
+    "frugal-iot-logger": "^1.0.7"
   },
   "private": true,
   "type": "module"
