@@ -140,6 +140,7 @@ class MqttOrganization {
     // noinspection JSUnusedGlobalSymbols
     this.status = "constructing"; // Note that the status isn't currently available anywhere
     this.projects = {};
+    this.subscriptions = [];
   }
 
   mqtt_status_set(k) {
