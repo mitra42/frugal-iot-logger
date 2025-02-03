@@ -221,8 +221,7 @@ class MqttOrganization {
   }
   configSubscribe() {
     // noinspection JSUnresolvedReference
-    if (!this.subscriptions) {
-      this.subscriptions = [];
+    if (this.subscriptions.length == 0) { // connect is called after onReconnect - dont re-add subscriptions
       let o = this.config_org;
       for (let [pid, p] of Object.entries(o.projects)) {
         this.watchProject(pid, p);
