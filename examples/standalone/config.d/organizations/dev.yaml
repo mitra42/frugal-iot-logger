@@ -22,6 +22,51 @@ projects:
             duplicates:
               significantdate: 900000
               significantvalue: 1
+          soil2:
+            type: int
+            duplicates:
+              significantdate: 900000
+              significantvalue: 1
+          soil3:
+            type: int
+            duplicates:
+              significantdate: 900000
+              significantvalue: 1
+          battery:
+            type: int
+            duplicates:
+              significantdate: 900000
+              significantvalue: 100
+  magi:
+    name: Magi Farm
+    nodes:
+      +:
+        topics:
+          humidity:
+            type: float
+            duplicates:
+              significantdate: 900000
+              significantvalue: 1
+          temperature:
+            type: float
+            duplicates:
+              significantdate: 900000
+              significantvalue: 1
+          soil:
+            type: int
+            duplicates:
+              significantdate: 900000
+              significantvalue: 1
+          soil2:
+            type: int
+            duplicates:
+              significantdate: 900000
+              significantvalue: 1
+          soil3:
+            type: int
+            duplicates:
+              significantdate: 900000
+              significantvalue: 1
           battery:
             type: int
             duplicates:
