@@ -111,7 +111,7 @@ class Subscription {
   valueFromText(message) {
     switch(this.type) {
       case "bool":
-        return toBool(message);
+        return Number(message); // Message "0" or "1" and want to store number anyway
       case "float":
         return Number(message)
       case "int":
