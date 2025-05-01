@@ -37,7 +37,7 @@ function findMostGranularN(n, topicpath, field) {
 function findMostGranularP(p, topicpath, field) {
   // noinspection JSUnusedLocalSymbols
   let [unusedOrg, unusedProject, node, topic] = topicpath.split('/');
-  let n,t,f;
+  let n,f; // t not used
   if (n = p.nodes[node]) {
     if (f = findMostGranularN(n, topicpath, field)) { return f; }
   }
@@ -50,12 +50,12 @@ function findMostGranularP(p, topicpath, field) {
 function findMostGranular(o, topicpath, field) {
   // noinspection JSUnusedLocalSymbols
   let [unusedOrg, project, node, topic] = topicpath.split('/');
-  let p,n,t,f;
+  let p,f; // n,t not used
   if (p = o.projects[project]) {
-    if (f = findMostGranularP(p, topicpath, field)) { return f; };
+    if (f = findMostGranularP(p, topicpath, field)) { return f; }
   }
   if (p = o.projects['+']) {
-    if (f = findMostGranularP(p, topicpath, field)) { return f; };
+    if (f = findMostGranularP(p, topicpath, field)) { return f; }
   }
   if (f = o[field]) { return f;}
   return null;
@@ -151,18 +151,13 @@ class MqttOrganization {
   startClient() {
     if (!this.mqtt_client) {
       // See https://stackoverflow.com/questions/69709461/mqtt-websocket-connection-failed
-      // TODO-41 handle multiple projects -> multiple mqtt sessions
       this.mqtt_status_set("connecting");
-      // TODO go thru the options at https://www.npmjs.com/package/mqtt#client-connect and check optimal
       // noinspection JSUnresolvedReference
       this.mqtt_client = mqtt.connect(this.config_mqtt.broker, {
+        // Options documented at https://www.npmjs.com/package/mqtt#Client
         connectTimeout: 5000,
         username: this.config_org.userid || this.id,
         password: this.config_org.mqtt_password,
-        // Remainder do not appear to be needed
-        //hostname: "127.0.0.1",
-        //port: 9012, // Has to be configured in mosquitto configuration
-        //path: "/mqtt",
       });
       this.mqtt_client.on("connect", () => {
         this.mqtt_status_set('connect');
@@ -221,7 +216,7 @@ class MqttOrganization {
   }
   configSubscribe() {
     // noinspection JSUnresolvedReference
-    if (this.subscriptions.length == 0) { // connect is called after onReconnect - dont re-add subscriptions
+    if (this.subscriptions.length === 0) { // connect is called after onReconnect - do not re-add subscriptions
       let o = this.config_org;
       for (let [pid, p] of Object.entries(o.projects)) {
         this.watchProject(pid, p);
@@ -329,6 +324,7 @@ class MqttLogger {
     async.waterfall([
       (cb1a) => this.readConfigFromYamlFile(`${inputDirPath}/config.yaml`, cb1a),
       (config, cb1b) => {
+        if (!config) config = {}; // If file is empty
         this.readConfigFromDir(`${inputDirPath}/config.d`, (err, config_d) => {
           if (err) {
             console.log(err); // Report it, but don't worry if dir does not exist

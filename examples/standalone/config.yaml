@@ -1,5 +1,3 @@
 # Configuration for FrugalIoT server
 server:
   port: 8080
-mqtt:
-  broker: ws://naturalinnovation.org:9012
