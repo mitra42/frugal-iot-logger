@@ -12,7 +12,17 @@ projects:
             duplicates:
               significantdate: 900000
               significantvalue: 1
+          +/humidity:
+            type: float
+            duplicates:
+              significantdate: 900000
+              significantvalue: 1
           temperature:
+            type: float
+            duplicates:
+              significantdate: 900000
+              significantvalue: 1
+          +/temperature:
             type: float
             duplicates:
               significantdate: 900000

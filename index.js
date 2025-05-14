@@ -23,6 +23,7 @@ function sanitizeUrl(t) {
 // Find where in o (config at the organizational level) is the most detailed response e.g. the field on the project will be overridden by one on a topic.
 function findMostGranularN(n, topicpath, field) {
   // noinspection JSUnusedLocalSymbols
+  // TODO-n130 this is presuming that the topicpath is always org/project/node/topic not ...node/+/topic
   let [unusedOrg, unusedProject, node, topic] = topicpath.split('/');
   let t,f;
   if (t = n.topics[topic]) {
@@ -59,6 +60,24 @@ function findMostGranular(o, topicpath, field) {
   }
   if (f = o[field]) { return f;}
   return null;
+}
+function findMostGranular2(o, topicpath, f) {
+  let i = topicpath.indexOf('/');
+  let n = (i < 0) ? topicpath : topicpath.substring(0, i);
+  let topicrest = (i < 0) ? null : topicpath.substring(i + 1);
+  if (topicrest) {
+    let oo = o.projects || o.nodes || o.sub // Next step depends on if org, project, node or topic
+    return (
+      (oo[n] && findMostGranular2(oo[n], topicrest, f))
+      || (oo['+'] && findMostGranular2(oo['+'], topicrest, f))
+    );
+  } else { // No more path, so look for n.field
+    let oo = o.topics // Next step depends on if org, project, node or topic
+    return (
+      ((typeof (f) === 'string') && oo[n][f])
+      || ((typeof (f) === 'function') && f(oo[n]))
+    );
+  }
 }
 
 // Class with one object per subscription including de-duplication rules.
@@ -214,26 +233,37 @@ class MqttOrganization {
     // Watch for quickdiscover messages and record last time node seen
     this.subscribe(`${this.id}/${pid}`, 0, null, "text", this.quickdiscover.bind(this));
   }
-  configSubscribe() {
+  configSubscribe() { // TODO-130 rewrite so not fixed on number of levels
     // noinspection JSUnresolvedReference
     if (this.subscriptions.length === 0) { // connect is called after onReconnect - do not re-add subscriptions
       let o = this.config_org;
       for (let [pid, p] of Object.entries(o.projects)) {
         this.watchProject(pid, p);
-        for (let [nid, n] of Object.entries(p.nodes)) { // Note that node could have name of '+' for tracking all of them
-          for (let tid of Object.keys(n.topics)) {
-            let topicpath = `${this.id}/${pid}/${nid}/${tid}`;
-            // TODO-logger for now its a generic messageReceived - may need some kind of action - for example if Config had a "control" rule
-            let duplicates = findMostGranular(this.config_org, topicpath, "duplicates");
-            let type = findMostGranular(this.config_org, topicpath, "type");
-            this.subscribe(topicpath, 0, duplicates, type, this.messageReceived.bind(this)); // TODO-66 think about QOS, add optional in YAML
-          }
+        this.recursivelySubscribe(pid, p);
+      }
+    }
+  }
+  recursivelySubscribe(subPathSoFar, o) { // subPathSoFar excludes starting "org"  note
+    if (o.topics) {
+      for (let topicid of Object.keys(o.topics)) {
+        let topicSubPath = subPathSoFar + "/" + topicid;
+        let duplicates = findMostGranular2(this.config_org, topicSubPath, "duplicates");
+        let type = findMostGranular2(this.config_org, topicSubPath, "type");
+        this.subscribe(`${this.id}/${topicSubPath}`, 0, duplicates, type, this.messageReceived.bind(this));
+      }
+    }
+    for (let z of [o.sub, o.nodes]) {
+      if (z) {
+        for (let [subid, s] of Object.entries(z)) {
+          this.recursivelySubscribe(subPathSoFar + "/" + subid, s);
         }
       }
     }
   }
 
-  resubscribe() {
+
+
+resubscribe() {
     for (let sub of this.subscriptions) {
       this.mqtt_subscribe(sub.topic, sub.qos);
     }
