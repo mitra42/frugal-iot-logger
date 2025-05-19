@@ -19,57 +19,15 @@ function sanitizeUrl(t) {
   return (t.replaceAll("../",""));
 }
 
-// Functions on config structures - see more in frugal-iot-client
-// Find where in o (config at the organizational level) is the most detailed response e.g. the field on the project will be overridden by one on a topic.
-function findMostGranularN(n, topicpath, field) {
-  // noinspection JSUnusedLocalSymbols
-  // TODO-n130 this is presuming that the topicpath is always org/project/node/topic not ...node/+/topic
-  let [unusedOrg, unusedProject, node, topic] = topicpath.split('/');
-  let t,f;
-  if (t = n.topics[topic]) {
-    if (f = t[field]) { return f; }
-  }
-  if (t = n.topics['+']) {
-    if (f = t[field]) { return f; }
-  }
-  if (f = n[field]) { return f; }
-  return null;
-}
-function findMostGranularP(p, topicpath, field) {
-  // noinspection JSUnusedLocalSymbols
-  let [unusedOrg, unusedProject, node, topic] = topicpath.split('/');
-  let n,f; // t not used
-  if (n = p.nodes[node]) {
-    if (f = findMostGranularN(n, topicpath, field)) { return f; }
-  }
-  if (n = p.nodes['+']) {
-    if (f = findMostGranularN(n, topicpath, field)) { return f; }
-  }
-  if (f = p[field]) { return f; }
-  return null;
-}
-function findMostGranular(o, topicpath, field) {
-  // noinspection JSUnusedLocalSymbols
-  let [unusedOrg, project, node, topic] = topicpath.split('/');
-  let p,f; // n,t not used
-  if (p = o.projects[project]) {
-    if (f = findMostGranularP(p, topicpath, field)) { return f; }
-  }
-  if (p = o.projects['+']) {
-    if (f = findMostGranularP(p, topicpath, field)) { return f; }
-  }
-  if (f = o[field]) { return f;}
-  return null;
-}
-function findMostGranular2(o, topicpath, f) {
+function findMostGranular(o, topicpath, f) {
   let i = topicpath.indexOf('/');
   let n = (i < 0) ? topicpath : topicpath.substring(0, i);
   let topicrest = (i < 0) ? null : topicpath.substring(i + 1);
   if (topicrest) {
     let oo = o.projects || o.nodes || o.sub // Next step depends on if org, project, node or topic
     return (
-      (oo[n] && findMostGranular2(oo[n], topicrest, f))
-      || (oo['+'] && findMostGranular2(oo['+'], topicrest, f))
+      (oo[n] && findMostGranular(oo[n], topicrest, f))
+      || (oo['+'] && findMostGranular(oo['+'], topicrest, f))
     );
   } else { // No more path, so look for n.field
     let oo = o.topics // Next step depends on if org, project, node or topic
@@ -233,7 +191,7 @@ class MqttOrganization {
     // Watch for quickdiscover messages and record last time node seen
     this.subscribe(`${this.id}/${pid}`, 0, null, "text", this.quickdiscover.bind(this));
   }
-  configSubscribe() { // TODO-130 rewrite so not fixed on number of levels
+  configSubscribe() {
     // noinspection JSUnresolvedReference
     if (this.subscriptions.length === 0) { // connect is called after onReconnect - do not re-add subscriptions
       let o = this.config_org;
@@ -247,8 +205,8 @@ class MqttOrganization {
     if (o.topics) {
       for (let topicid of Object.keys(o.topics)) {
         let topicSubPath = subPathSoFar + "/" + topicid;
-        let duplicates = findMostGranular2(this.config_org, topicSubPath, "duplicates");
-        let type = findMostGranular2(this.config_org, topicSubPath, "type");
+        let duplicates = findMostGranular(this.config_org, topicSubPath, "duplicates");
+        let type = findMostGranular(this.config_org, topicSubPath, "type");
         this.subscribe(`${this.id}/${topicSubPath}`, 0, duplicates, type, this.messageReceived.bind(this));
       }
     }
