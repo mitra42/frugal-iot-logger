@@ -1,0 +1,91 @@
+# Configuration for FrugalIoT server for organization=dev
+mqtt_password: public
+name: Development
+gsheets:
+  - url: https://script.google.com/macros/s/AKfycbzlLfnR4tPgkoAmPZW-Z6F_J5PpTOG_U8Ip59qlo6OVYdIEOB3yvlF7GIJz1bANFW4/exec
+  - spreadsheet: https://docs.google.com/spreadsheets/d/1mPHvPFW4YwRvxtTQXP4fKKDjWbYN8JpeaIAVgeFIfgA
+  - intervalSeconds: 300
+  - topics:
+      - dev/lotus/esp32-3c7ab8/sht/humidity
+      - dev/lotus/esp32-3c7ab8/sht/temperature
+projects:
+  lotus:
+    name: Lotus Ponds
+    nodes:
+      +:
+        topics:
+          humidity:
+            type: float
+            duplicates:
+              significantdate: 900000
+              significantvalue: 1
+          +/humidity:
+            type: float
+            duplicates:
+              significantdate: 900000
+              significantvalue: 1
+          temperature:
+            type: float
+            duplicates:
+              significantdate: 900000
+              significantvalue: 1
+          +/temperature:
+            type: float
+            duplicates:
+              significantdate: 900000
+              significantvalue: 1
+          soil:
+            type: int
+            duplicates:
+              significantdate: 900000
+              significantvalue: 1
+          soil2:
+            type: int
+            duplicates:
+              significantdate: 900000
+              significantvalue: 1
+          soil3:
+            type: int
+            duplicates:
+              significantdate: 900000
+              significantvalue: 1
+          battery:
+            type: int
+            duplicates:
+              significantdate: 900000
+              significantvalue: 100
+  magi:
+    name: Magi Farm
+    nodes:
+      +:
+        topics:
+          humidity:
+            type: float
+            duplicates:
+              significantdate: 900000
+              significantvalue: 1
+          temperature:
+            type: float
+            duplicates:
+              significantdate: 900000
+              significantvalue: 1
+          soil:
+            type: int
+            duplicates:
+              significantdate: 900000
+              significantvalue: 1
+          soil2:
+            type: int
+            duplicates:
+              significantdate: 900000
+              significantvalue: 1
+          soil3:
+            type: int
+            duplicates:
+              significantdate: 900000
+              significantvalue: 1
+          battery:
+            type: int
+            duplicates:
+              significantdate: 900000
+              significantvalue: 100

@@ -8,6 +8,12 @@ It should be able to work with any MQTT server that allows websocket connections
 but it is only (currently) tested against the Frugal-IoT mqtt server, 
 which is mosquitto running at ws://naturalinnovation.org:9012
 
+The default behavior of the frugal-iot-logger is to store to CSV
+files in a format that can be retrieved by frugal-iot-client or used for
+other analysis.
+
+It can also be used with Google Spreadsheets (aka gsheets)
+
 ### Example of usage with expressjs 
 
 The main example of the loggers use - that we test against - is in the 
@@ -28,6 +34,15 @@ Make it match your hierarchy but note its fixed at 4 levels   organization, proj
 ```
 node standalone.js
 ```
+
+#### Google Spreadsheets
+Simple usage with Google spreadsheets is supported.  This requires an addition to
+an organization's config file (e.g. `dev.yaml`) with a reference to the app URL
+and the list of topics that should be logged to the columns.
+
+A full example is in `examples/gsheets`, look at `gsheet.app` for instructions on 
+setting up a spreadsheet, and at `config.d/organizations/dev.yaml`->`gsheets` for 
+how to configure it.
 
 ### Reporting problems
 

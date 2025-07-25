@@ -1,0 +1,2 @@
+# Talking to the FrugalIot broker on naturalinnovation.org:9012
+broker: wss://frugaliot.naturalinnovation.org/wss

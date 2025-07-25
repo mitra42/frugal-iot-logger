@@ -1,0 +1,45 @@
+/*
+ * To setup a google sheet for this example
+ * Create a Google Sheet.
+ * In the first row put column names, for example "Date, Temperature, Humidity"
+ *
+ * Go to Extensions > Apps Script.
+ * In the Apps Script editor, paste this file
+ *
+ * In the Apps Script editor, click on Deploy > New Deployment.
+ * Select Web App.
+ * Set the following:
+ * Execute as: Me (your Google account).
+ * Who has access: Anyone (if you want public access).
+ * Click Deploy and authorize the script.
+ * If you get a big red warning triangle - click advanced and "Go to untitled project" and Allow
+ * Copy the Web App URL provided after deployment.
+ * It should look something like
+ *  https://script.google.com/macros/s/AKfycbzlLfnR4tPgkoAmPZW-Z6F_J5PpTOG_U8Ip59qlo6OVYblahblahyvlF7GIJz1bANFW4/exec
+ *
+ * Note that I have had problems getting a 403 "unauthorized" immediately after deploying, tried deploying a second
+ * time and then seeing it work, I'm not sure if there is a time between deploying and it being accessible.
+ */
+
+function doPost(e) {
+  try {
+    // Parse the incoming JSON payload
+    var data = JSON.parse(e.postData.contents);
+
+    // Open the active spreadsheet
+    // TODO-9 make this select a fixed sheet
+    var sheet = SpreadsheetApp.getActiveSpreadsheet().getActiveSheet();
+
+    // Append the data as a new row
+    // var row = []; for (var key in data) { row.push(data[key]); } // If its an object build a row
+    sheet.appendRow(data.row);
+
+    // Return a success response
+    return ContentService.createTextOutput(JSON.stringify({ status: "success" }))
+                          .setMimeType(ContentService.MimeType.JSON);
+  } catch (error) {
+    // Return an error response
+    return ContentService.createTextOutput(JSON.stringify({ status: "error", message: error.message }))
+                          .setMimeType(ContentService.MimeType.JSON);
+  }
+}

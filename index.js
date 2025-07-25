@@ -46,6 +46,7 @@ class Subscription {
     this.qos = qos;
     this.type = type;
     this.cb = cb;
+    this.currentvalue = {};
     this.lastdate = {};
     this.lastvalue = {};
     this.duplicates = duplicates; // Rules to follow
@@ -77,6 +78,7 @@ class Subscription {
     // Dispatch, but don't dispatch duplicates
     let value = this.valueFromText(message);
     let date = new Date();
+    this.currentvalue[topic] = value; // Save current value for e.g. Gsheets
     if (!this.isDuplicate(date, topic, value)) {
       this.lastdate[topic] = date;
       this.lastvalue[topic] = value;
@@ -118,6 +120,7 @@ class MqttOrganization {
     this.status = "constructing"; // Note that the status isn't currently available anywhere
     this.projects = {};
     this.subscriptions = [];
+    this.gsheets = [];
   }
 
   mqtt_status_set(k) {
@@ -139,6 +142,7 @@ class MqttOrganization {
       this.mqtt_client.on("connect", () => {
         this.mqtt_status_set('connect');
         this.configSubscribe();
+        this.gsheetsSubscribe()
       });
       this.mqtt_client.on("reconnect", () => {
         this.mqtt_status_set('reconnect');
@@ -219,9 +223,7 @@ class MqttOrganization {
     }
   }
 
-
-
-resubscribe() {
+  resubscribe() {
     for (let sub of this.subscriptions) {
       this.mqtt_subscribe(sub.topic, sub.qos);
     }
@@ -249,8 +251,70 @@ resubscribe() {
       }
     })
   }
+  gsheetsSubscribe() {
+    if (this.gsheets.length === 0) { // connect is called after onReconnect - do not re-add subscriptions
+      let o = this.config_org;
+      if (o.gsheets) {
+        for (let gsconfig of o.gsheets) {
+          let gs = new Gsheet(gsconfig, this);
+          this.gsheets.push(gs);
+          gs.start();
+        }
+      }
+    }
+  }
+  findLastValue(topic) {
+    let s = this.subscriptions.find(s => s.matches(topic));
+    return s && s.currentvalue[topic];
+  }
 }  // MqttOrganization
+class Gsheet {
+  constructor(config, org) {
+    this.config = config;
+    this.org = org;
+  }
+  start() {
+    //https://developer.mozilla.org/docs/Web/API/setInterval
+    setInterval(this.tick.bind(this), this.config.intervalSeconds * 1000);
+  }
 
+  // This function runs periodically and writes to the Google spreadsheet
+  tick() {
+    // Setup an array with the values of the topics we are monitoring in the same order as in the configuration
+    let row = this.config.topics
+      .map((topic) => this.org.findLastValue(topic));
+    // The first row is always the date
+    let date = new Date();
+    // Google sheets wants ISO format, but will fail if it has the Z on the end. So sending e.g. 2025-07-25T10:20:01
+    row.unshift(date.toISOString().substring(0,19)); // First column is date // TODO-9 check this is correct format for date in gsheet
+    // Sending the target sheet, but for now it is ignored
+    let dataToSend = {
+      sheet: this.config.sheet,
+      row: row,
+    }
+    // Now send with HTTP,
+    fetch(this.config.url, {
+      method: 'POST', // Specify the HTTP method as POST
+      headers: {
+        'Content-Type': 'application/json', // Indicate that the request body is JSON
+      },
+      body: JSON.stringify(dataToSend), // Convert the JavaScript object to a JSON string
+    })
+    // And check the result and report to console
+    .then(response => {
+      if (!response.ok) {
+        throw new Error(`Failed to append to ${this.config.url} status: ${response.status}`);
+      }
+    })
+    //TODO-9 comment out on success
+    .then(data => {
+      console.log('Success:', this.config.url, data); // Log the successful response data
+    })
+    .catch(error => {
+      console.error('Error:', error); // Log any errors during the fetch operation
+    });
+ }
+}
 class MqttLogger {
   constructor() {
     this.clients = {};
@@ -336,7 +400,7 @@ class MqttLogger {
     });
   }
 
-
+  // Start the logger, iterating over config.organizations and starting an MQTT client for each
   start() {
     // noinspection JSUnresolvedReference
     for (let [oid, oconfig] of Object.entries(this.config.organizations)) {
