@@ -276,6 +276,7 @@ class Gsheet {
   start() {
     //https://developer.mozilla.org/docs/Web/API/setInterval
     setInterval(this.tick.bind(this), this.config.intervalSeconds * 1000);
+    // No authentication or initialization required for Gsheets
   }
 
   // This function runs periodically and writes to the Google spreadsheet
