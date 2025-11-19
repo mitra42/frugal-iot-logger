@@ -1,0 +1,17 @@
+# Node modules
+node_modules/
+
+# Firebase credentials
+*firebase-adminsdk*.json
+firebase-service-account.json
+
+# macOS
+.DS_Store
+
+# IDE
+.vscode/
+.idea/
+
+# Environment files
+.env
+.env.local
