@@ -281,10 +281,10 @@ class Gsheet {
 
   // This function runs periodically and writes to the Google spreadsheet
   tick() {
-    // Setup an array with the values of the topics we are monitoring in the same order as in the configuration
+    // Set up an array with the values of the topics we are monitoring in the same order as in the configuration
     let row = this.config.topics
       .map((topic) => this.org.findLastValue(topic));
-    // The first row is always the date
+    // The first column is always the date
     let date = new Date();
     // Google sheets wants ISO format, but will fail if it has the Z on the end. So sending e.g. 2025-07-25T10:20:01
     row.unshift(date.toISOString().substring(0,19)); // First column is date // TODO-9 check this is correct format for date in gsheet
