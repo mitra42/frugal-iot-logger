@@ -1,3 +1,3 @@
-# Main configuration file for Frugal IoT Logger with Firebase
-mqtt:
-  broker: wss://frugaliot.naturalinnovation.org/wss
+# Configuration for FrugalIoT server
+server:
+  port: 8080

@@ -2,7 +2,11 @@
 
 ## Overview
 
-This Firebase integration automatically uploads MQTT sensor data to Firebase Realtime Database in real-time, providing cloud storage and easy access from web/mobile apps.
+This Firebase integration automatically uploads MQTT sensor data to Firebase Realtime Database, providing cloud storage and easy access from web/mobile apps.
+
+**How data is saved:**
+- **latest/** - Updated immediately when ANY sensor sends data (real-time)
+- **history/** - Saved periodically (default: every 60 seconds) as snapshots of ALL sensors
 
 ## Quick Start
 

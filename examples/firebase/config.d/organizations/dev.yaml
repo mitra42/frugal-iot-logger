@@ -4,10 +4,11 @@ name: Development
 
 # Firebase configuration
 firebase:
-  # Path to your Firebase service account JSON file
-  serviceAccount: ./varta-gdt-firebase-adminsdk-fbsvc-caa77cce4c.json
-  # Your Firebase Realtime Database URL
-  databaseURL: "https://varta-gdt-default-rtdb.asia-southeast1.firebasedatabase.app"
+  # Path to your Firebase service account JSON file (LOCAL file path, downloaded from Firebase Console)
+  # Download from: Firebase Console → Project Settings → Service Accounts → Generate New Private Key
+  serviceAccount: ./firebase-service-account.json
+  # Your Firebase Realtime Database URL (found in Firebase Console → Realtime Database)
+  databaseURL: "https://your-project-id.firebaseio.com"
   # Optional: log each write operation
   verbose: true
   # Optional: maintain a "latest" value for each topic for quick access
@@ -26,7 +27,7 @@ projects:
       +:
         topics:
           humidity:
-            type: float
+            type: float`
             duplicates:
               significantdate: 60000
               significantvalue: 1
