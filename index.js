@@ -11,6 +11,7 @@ import async from 'async'; // https://caolan.github.io/async/v3/docs.html
 import yaml from 'js-yaml'; // https://www.npmjs.com/package/js-yaml
 import { appendFile, mkdir, readFile, readdir } from "fs"; // https://nodejs.org/api/fs.html
 import mqtt from 'mqtt'; // https://www.npmjs.com/package/mqtt
+import admin from 'firebase-admin'; // Firebase Admin SDK
 
 // =========== Some generic helper functions, not specific to this client ========
 // Clean any leading "/" or "../" from a string so it can be safely appended to a path
@@ -121,6 +122,7 @@ class MqttOrganization {
     this.projects = {};
     this.subscriptions = [];
     this.gsheets = [];
+    this.firebase = null;
   }
 
   mqtt_status_set(k) {
@@ -142,7 +144,8 @@ class MqttOrganization {
       this.mqtt_client.on("connect", () => {
         this.mqtt_status_set('connect');
         this.configSubscribe();
-        this.gsheetsSubscribe()
+        this.gsheetsSubscribe();
+        this.firebaseSubscribe();
       });
       this.mqtt_client.on("reconnect", () => {
         this.mqtt_status_set('reconnect');
@@ -233,7 +236,13 @@ class MqttOrganization {
   }
   // Called by s.dispatch, currently all the same
   messageReceived(date, topic, message) {
-      this.log(date, topic, message);
+      // Send to Firebase if configured
+      if (this.firebase) {
+        // Find the subscription to get the parsed value
+        let s = this.subscriptions.find(s => s.matches(topic));
+        let value = s ? s.currentvalue[topic] : message;
+        this.firebase.writeData(date, topic, message, value);
+      }
   }
   log(date, topic, message) {
     let path = `data/${sanitizeUrl(topic)}`;
@@ -267,7 +276,184 @@ class MqttOrganization {
     let s = this.subscriptions.find(s => s.matches(topic));
     return s && s.currentvalue[topic];
   }
+
+  // Initialize Firebase integration if configured in the organization's YAML config
+  firebaseSubscribe() {
+    if (!this.firebase && this.config_org.firebase) {
+      this.firebase = new Firebase(this.config_org.firebase, this);
+      this.firebase.start();
+    }
+  }
 }  // MqttOrganization
+
+// ================== Firebase Integration ========================
+class Firebase {
+  constructor(config, org) {
+    this.config = config;
+    this.org = org;
+    this.db = null;
+    this.initialized = false;
+    // Store latest values for each node to create snapshots
+    this.nodeLatestValues = {}; // { nodeId: { topicKey: { value, timestamp, date, raw } } }
+    // Track last written history to avoid duplicates when nodes are asleep
+    this.lastWrittenHistory = {}; // { nodeKey: JSON string of last history data }
+    this.historyTimer = null;
+  }
+
+  start() {
+    try {
+      // Initialize Firebase Admin SDK
+      if (!admin.apps.length) {
+        admin.initializeApp({
+          credential: admin.credential.cert(this.config.serviceAccount),
+          databaseURL: this.config.databaseURL
+        });
+      }
+      this.db = admin.database();
+      this.initialized = true;
+      console.log('Firebase initialized for org:', this.org.id);
+      
+      // Start periodic history saving
+      const historyInterval = (this.config.historyIntervalSeconds || 60) * 1000;
+      this.historyTimer = setInterval(() => {
+        this.saveHistoryForAllNodes();
+      }, historyInterval);
+      
+    } catch (error) {
+      console.error('Firebase initialization failed:', error);
+    }
+  }
+  
+  saveHistoryForAllNodes() {
+    // Save history snapshot for each node that has data
+    for (const [nodeKey, sensorData] of Object.entries(this.nodeLatestValues)) {
+      const sensorCount = Object.keys(sensorData).length;
+      if (sensorCount === 0) continue;
+      
+      // Extract nodeId from nodeKey (format: "org/project/node")
+      const nodeId = nodeKey.split('/')[2];
+      const nodePath = `nodes/${nodeId}`;
+      
+      // Create history snapshot with all sensor values (excluding timestamp/date for comparison)
+      const historyData = {};
+      for (const [key, data] of Object.entries(sensorData)) {
+        historyData[key] = data.value;
+      }
+      
+      // Check if data has changed since last write
+      const historyDataString = JSON.stringify(historyData);
+      if (this.lastWrittenHistory[nodeKey] === historyDataString) {
+        // Data hasn't changed - skip writing duplicate
+        if (this.config.verbose) {
+          console.log('Firebase history skipped (no change):', nodeId);
+        }
+        continue;
+      }
+      
+      // Data has changed - add timestamp and save
+      historyData.timestamp = Date.now();
+      historyData.date = new Date().toISOString();
+      
+      // Save to Firebase
+      this.db.ref(`${nodePath}/history`).push(historyData)
+        .then(() => {
+          // Update last written history after successful write
+          this.lastWrittenHistory[nodeKey] = historyDataString;
+          if (this.config.verbose) {
+            console.log('Firebase history saved:', nodeId, `(${sensorCount} sensors)`);
+          }
+        })
+        .catch((error) => {
+          console.error('Firebase history write error:', error);
+        });
+    }
+  }
+
+  // Write MQTT data to Firebase Realtime Database
+  writeData(date, topic, message, value) {
+    if (!this.initialized) return;
+
+    try {
+      // Parse topic: org/project/node/topic or org/project/node/subtopic/topic
+      const parts = topic.split('/');
+      
+      // Skip if not a valid sensor data topic (must have at least 4 parts)
+      if (parts.length < 4) {
+        if (this.config.verbose) {
+          console.log('Skipping non-sensor topic (too few parts):', topic);
+        }
+        return;
+      }
+      
+      // Extract parts: org, project, node, and everything else as topic path
+      const orgId = parts[0];
+      const projectId = parts[1];
+      const nodeId = parts[2];
+      // Join remaining parts as topic path (handles both "temperature" and "sht/temperature")
+      const topicPath = parts.slice(3).join('/');
+      
+      // Skip if any part is undefined or empty
+      if (!orgId || !projectId || !nodeId || !topicPath) {
+        console.log('Skipping invalid topic structure:', topic);
+        return;
+      }
+      
+      // Check if node filtering is enabled
+      if (this.config.allowedNodes && this.config.allowedNodes.length > 0) {
+        // Check if this node is in the allowed list
+        if (!this.config.allowedNodes.includes(nodeId)) {
+          if (this.config.verbose) {
+            console.log('Skipping node not in allowedNodes:', nodeId);
+          }
+          return;
+        }
+      }
+      
+      const timestamp = date.valueOf();
+      const topicKey = topicPath.replace(/\//g, '_');
+      
+      // Initialize node storage if needed
+      const nodeKey = `${orgId}/${projectId}/${nodeId}`;
+      if (!this.nodeLatestValues[nodeKey]) {
+        this.nodeLatestValues[nodeKey] = {};
+      }
+      
+      // Update the latest value for this specific topic
+      this.nodeLatestValues[nodeKey][topicKey] = {
+        value: value,
+        timestamp: timestamp,
+        date: date.toISOString(),
+        raw: message
+      };
+      
+      // Build simplified path - just nodes/{nodeId}
+      const nodePath = `nodes/${nodeId}`;
+      
+      // Update "latest" - single object with all current sensor values
+      const latestData = {};
+      for (const [key, data] of Object.entries(this.nodeLatestValues[nodeKey])) {
+        latestData[key] = data.value;
+      }
+      latestData.timestamp = timestamp;
+      latestData.date = date.toISOString();
+      
+      this.db.ref(`${nodePath}/latest`).set(latestData)
+        .then(() => {
+          if (this.config.verbose) {
+            console.log('Firebase latest updated:', nodeId);
+          }
+        })
+        .catch((error) => {
+          console.error('Firebase latest update error:', error);
+        });
+      
+      // Note: History is saved periodically by timer, not on every sensor update
+      
+    } catch (error) {
+      console.error('Firebase write failed:', error);
+    }
+  }
+}
 class Gsheet {
   constructor(config, org) {
     this.config = config;

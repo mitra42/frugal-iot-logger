@@ -1,0 +1,137 @@
+# Configuration for FrugalIoT server with Firebase integration
+mqtt_password: public
+name: Development
+
+# Firebase configuration
+firebase:
+  # Path to your Firebase service account JSON file (LOCAL file path, downloaded from Firebase Console)
+  # Download from: Firebase Console → Project Settings → Service Accounts → Generate New Private Key
+  serviceAccount: ./firebase-service-account.json
+  # Your Firebase Realtime Database URL (found in Firebase Console → Realtime Database)
+  databaseURL: "https://your-project-id.firebaseio.com"
+  # Optional: log each write operation
+  verbose: true
+  # Optional: maintain a "latest" value for each topic for quick access
+  trackLatest: true
+  # Optional: How often to save history snapshots (in seconds, default: 60)
+  historyIntervalSeconds: 60
+  # Optional: Only save data from specific nodes (leave empty or remove to allow all nodes)
+  allowedNodes:
+    - esp32-6c5e0e
+    - esp32-3c7ab8
+
+projects:
+  lotus:
+    name: Lotus Ponds
+    nodes:
+      +:
+        topics:
+          humidity:
+            type: float`
+            duplicates:
+              significantdate: 60000
+              significantvalue: 1
+          temperature:
+            type: float
+            duplicates:
+              significantdate: 60000
+              significantvalue: 1
+          soil:
+            type: int
+            duplicates:
+              significantdate: 60000
+              significantvalue: 1
+          soil2:
+            type: int
+            duplicates:
+              significantdate: 60000
+              significantvalue: 1
+          soil3:
+            type: int
+            duplicates:
+              significantdate: 60000
+              significantvalue: 1
+          battery:
+            type: int
+            duplicates:
+              significantdate: 60000
+              significantvalue: 100
+        sub:
+          +:
+            topics:
+              humidity:
+                type: float
+                duplicates:
+                  significantdate: 60000
+                  significantvalue: 1
+              temperature:
+                type: float
+                duplicates:
+                  significantdate: 60000
+                  significantvalue: 1
+  magi:
+    name: Magi Farm
+    nodes:
+      +:
+        topics:
+          humidity:
+            type: float
+            duplicates:
+              significantdate: 60000
+              significantvalue: 1
+          temperature:
+            type: float
+            duplicates:
+              significantdate: 60000
+              significantvalue: 1
+          soil:
+            type: int
+            duplicates:
+              significantdate: 60000
+              significantvalue: 1
+          soil2:
+            type: int
+            duplicates:
+              significantdate: 60000
+              significantvalue: 1
+          soil3:
+            type: int
+            duplicates:
+              significantdate: 60000
+              significantvalue: 1
+          battery:
+            type: int
+            duplicates:
+              significantdate: 60000
+              significantvalue: 100
+  developers:
+    name: Developers
+    nodes:
+      +:
+        sub:
+          sht:
+            topics:
+              humidity:
+                type: float
+                duplicates:
+                  significantdate: 60000
+                  significantvalue: 0.5
+              temperature:
+                type: float
+                duplicates:
+                  significantdate: 60000
+                  significantvalue: 0.5
+          ds18b20:
+            topics:
+              ds18b20:
+                type: float
+                duplicates:
+                  significantdate: 60000
+                  significantvalue: 1
+          soil:
+            topics:
+              soil:
+                type: int
+                duplicates:
+                  significantdate: 60000
+                  significantvalue: 1

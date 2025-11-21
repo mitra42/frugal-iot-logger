@@ -44,6 +44,17 @@ A full example is in `examples/gsheets`, look at `gsheet.app` for instructions o
 setting up a spreadsheet, and at `config.d/organizations/dev.yaml`->`gsheets` for 
 how to configure it.
 
+#### Firebase Integration
+Automatic upload of MQTT data to Firebase Realtime Database is supported. This allows
+real-time data access, cloud storage, and easy integration with web/mobile apps.
+
+To enable Firebase:
+1. Add a `firebase` section to your organization config (e.g. `dev.yaml`)
+2. Provide your Firebase service account JSON and database URL
+3. Data is automatically uploaded as it arrives via MQTT
+
+**Complete documentation and example:** [examples/firebase/README.md](examples/firebase/README.md)
+
 ### Reporting problems
 
 Complicated issues involving interaction between this repo 
