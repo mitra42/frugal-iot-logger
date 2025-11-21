@@ -236,9 +236,11 @@ class MqttOrganization {
   }
   // Called by s.dispatch, currently all the same
   messageReceived(date, topic, message) {
+      this.log(date, topic, message);
       // Send to Firebase if configured
       if (this.firebase) {
         // Find the subscription to get the parsed value
+        // @Taruun - shouldnt this only send if topic is from an allowed device ?
         let s = this.subscriptions.find(s => s.matches(topic));
         let value = s ? s.currentvalue[topic] : message;
         this.firebase.writeData(date, topic, message, value);
@@ -272,12 +274,14 @@ class MqttOrganization {
       }
     }
   }
+  // Starting with a topic return the current value of the topic - for periodic forwarders.
   findLastValue(topic) {
     let s = this.subscriptions.find(s => s.matches(topic));
     return s && s.currentvalue[topic];
   }
 
   // Initialize Firebase integration if configured in the organization's YAML config
+  //TODO-10 see gsheetsSubscribe this should push
   firebaseSubscribe() {
     if (!this.firebase && this.config_org.firebase) {
       this.firebase = new Firebase(this.config_org.firebase, this);
@@ -335,6 +339,7 @@ class Firebase {
       const nodePath = `nodes/${nodeId}`;
       
       // Create history snapshot with all sensor values (excluding timestamp/date for comparison)
+      // TODO-Taruun - see note in writeData but if nodeLatestValues is simplified then this is just a copy historyData = sensorData
       const historyData = {};
       for (const [key, data] of Object.entries(sensorData)) {
         historyData[key] = data.value;
@@ -369,7 +374,8 @@ class Firebase {
     }
   }
 
-  // Write MQTT data to Firebase Realtime Database
+  // Write a single MQTT message to Firebase Realtime Database
+  // TODO-Taruun why do we need message, it is saved but never used or send to firebase
   writeData(date, topic, message, value) {
     if (!this.initialized) return;
 
@@ -391,7 +397,7 @@ class Firebase {
       const nodeId = parts[2];
       // Join remaining parts as topic path (handles both "temperature" and "sht/temperature")
       const topicPath = parts.slice(3).join('/');
-      
+
       // Skip if any part is undefined or empty
       if (!orgId || !projectId || !nodeId || !topicPath) {
         console.log('Skipping invalid topic structure:', topic);
@@ -401,6 +407,7 @@ class Firebase {
       // Check if node filtering is enabled
       if (this.config.allowedNodes && this.config.allowedNodes.length > 0) {
         // Check if this node is in the allowed list
+        // TODO-Taruun - this might be much better if keep list of nodes as paths dev/developers/esp1234 and then test using topic.startsWith
         if (!this.config.allowedNodes.includes(nodeId)) {
           if (this.config.verbose) {
             console.log('Skipping node not in allowedNodes:', nodeId);
@@ -413,17 +420,20 @@ class Firebase {
       const topicKey = topicPath.replace(/\//g, '_');
       
       // Initialize node storage if needed
-      const nodeKey = `${orgId}/${projectId}/${nodeId}`;
+      const nodeKey = `${orgId}/${projectId}/${nodeId}`; // TODO-TARUUN - you already have this defined as topicPath above
       if (!this.nodeLatestValues[nodeKey]) {
         this.nodeLatestValues[nodeKey] = {};
       }
-      
+
+      // TODO-Taruun Why store a complex data structure like this ? The only thing used from here is the value.
+      // TODO-Taruun you could just save nadeLatestValues[nodekey][topicKey] = value
+      // TODO-Taruun then the copy to lastestData is trivial latedData = nodeLatedValues[nodeKey]
       // Update the latest value for this specific topic
       this.nodeLatestValues[nodeKey][topicKey] = {
         value: value,
-        timestamp: timestamp,
-        date: date.toISOString(),
-        raw: message
+        timestamp: timestamp,   // TODO-Taruun this is never read, why are we saving it?
+        date: date.toISOString(),  // TODO-Taruun this is never read, why are we saving it?
+        raw: message // TODO-Taruun this is never read, why are we saving it?
       };
       
       // Build simplified path - just nodes/{nodeId}
@@ -495,7 +505,7 @@ class Gsheet {
     })
     //TODO-9 comment out on success
     .then(data => {
-      console.log('Success:', this.config.url, data); // Log the successful response data
+      //console.log('Success:', this.config.url, data); // Log the successful response data
     })
     .catch(error => {
       console.error('Error:', error); // Log any errors during the fetch operation
