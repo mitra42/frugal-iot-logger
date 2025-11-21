@@ -9,7 +9,11 @@ import { MqttLogger } from "../../index.js";  // https://github.com/mitra42/frug
 let mqttLogger = new MqttLogger();
 
 mqttLogger.readYamlConfig('.', (err, configobj) => {
-    console.log("Logger Config=",configobj);
+  if (err) {
+    console.error('Error reading config:', err);
+    process.exit(1);
+  }
+  console.log("Logger Config=",configobj);
     mqttLogger.start();
   });
 
