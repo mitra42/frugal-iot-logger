@@ -1,0 +1,2 @@
+# MQTT broker configuration
+broker: ws://naturalinnovation.org:9012

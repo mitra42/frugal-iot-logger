@@ -1,0 +1,13 @@
+{
+    "name": "frugal-iot-logger-firebase-example",
+    "version": "1.0.0",
+    "description": "Example of using frugal-iot-logger with Firebase",
+    "main": "firebase.js",
+    "type": "module",
+    "scripts": {
+        "start": "node firebase.js"
+    },
+    "dependencies": {
+        "frugal-iot-logger": "^1.1.2"
+    }
+}
