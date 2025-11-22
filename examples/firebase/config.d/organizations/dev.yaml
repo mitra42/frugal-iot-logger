@@ -27,7 +27,7 @@ projects:
       +:
         topics:
           humidity:
-            type: float`
+            type: float
             duplicates:
               significantdate: 60000
               significantvalue: 1

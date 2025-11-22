@@ -300,7 +300,7 @@ class Firebase {
     this.db = null;
     this.initialized = false;
     // Store latest values for each node to create snapshots
-    this.nodeLatestValues = {}; // { nodeId: { topicKey: { value, timestamp, date, raw } } }
+    this.nodeLatestValues = {}; // { nodeKey: { topicKey: value } } - simplified structure
     // Track last written history to avoid duplicates when nodes are asleep
     this.lastWrittenHistory = {}; // { nodeKey: JSON string of last history data }
     this.historyTimer = null;
@@ -309,6 +309,8 @@ class Firebase {
   start() {
     try {
       // Initialize Firebase Admin SDK
+      // Note: Only one Firebase app can be initialized per process
+      // If multiple orgs need Firebase, they should share the same project or use named apps
       if (!admin.apps.length) {
         admin.initializeApp({
           credential: admin.credential.cert(this.config.serviceAccount),
@@ -328,6 +330,15 @@ class Firebase {
     } catch (error) {
       console.error('Firebase initialization failed:', error);
     }
+  }
+  
+  // Clean up resources when stopping
+  stop() {
+    if (this.historyTimer) {
+      clearInterval(this.historyTimer);
+      this.historyTimer = null;
+    }
+    this.initialized = false;
   }
   
   saveHistoryForAllNodes() {
@@ -411,6 +422,9 @@ class Firebase {
       // Uses topic.startsWith() for efficient prefix matching as suggested
       if (this.config.allowedNodes && this.config.allowedNodes.length > 0) {
         const nodeTopicPrefix = `${orgId}/${projectId}/${nodeId}`;
+        // Check if any allowedPath matches:
+        // - Full path match: "dev/developers/esp32" matches "dev/developers/esp32-6c5e0e"
+        // - Node ID match: "esp32-6c5e0e" matches nodeId directly
         const isAllowed = this.config.allowedNodes.some(allowedPath => 
           nodeTopicPrefix.startsWith(allowedPath) || allowedPath === nodeId
         );
