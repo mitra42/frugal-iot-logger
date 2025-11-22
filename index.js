@@ -239,11 +239,12 @@ class MqttOrganization {
       this.log(date, topic, message);
       // Send to Firebase if configured
       if (this.firebase) {
-        // Find the subscription to get the parsed value
-        // @Taruun - shouldnt this only send if topic is from an allowed device ?
+        // Find the subscription to get the parsed value (already converted to correct type)
         let s = this.subscriptions.find(s => s.matches(topic));
         let value = s ? s.currentvalue[topic] : message;
-        this.firebase.writeData(date, topic, message, value);
+        // Pass only value (not message) - message is raw string, value is parsed/typed
+        // Filtering by allowedNodes happens inside writeData
+        this.firebase.writeData(date, topic, value);
       }
   }
   log(date, topic, message) {
@@ -281,11 +282,12 @@ class MqttOrganization {
   }
 
   // Initialize Firebase integration if configured in the organization's YAML config
-  //TODO-10 see gsheetsSubscribe this should push
+  // Pattern matches gsheetsSubscribe - create instance, store reference, then start
   firebaseSubscribe() {
-    if (!this.firebase && this.config_org.firebase) {
-      this.firebase = new Firebase(this.config_org.firebase, this);
-      this.firebase.start();
+    if (this.config_org.firebase) {
+      let fb = new Firebase(this.config_org.firebase, this);
+      this.firebase = fb;
+      fb.start();
     }
   }
 }  // MqttOrganization
@@ -338,17 +340,16 @@ class Firebase {
       const nodeId = nodeKey.split('/')[2];
       const nodePath = `nodes/${nodeId}`;
       
-      // Create history snapshot with all sensor values (excluding timestamp/date for comparison)
-      // TODO-Taruun - see note in writeData but if nodeLatestValues is simplified then this is just a copy historyData = sensorData
-      const historyData = {};
-      for (const [key, data] of Object.entries(sensorData)) {
-        historyData[key] = data.value;
-      }
+      // Changed: Simplified history data creation using spread operator
+      // Previously had to loop and extract .value from each sensor
+      // Now sensorData directly contains values, so just copy it
+      const historyData = {...sensorData};
       
-      // Check if data has changed since last write
+      // Check if data has changed since last write (prevents duplicate writes during deep sleep)
       const historyDataString = JSON.stringify(historyData);
       if (this.lastWrittenHistory[nodeKey] === historyDataString) {
         // Data hasn't changed - skip writing duplicate
+        // This saves Firebase writes when devices are in deep sleep
         if (this.config.verbose) {
           console.log('Firebase history skipped (no change):', nodeId);
         }
@@ -374,9 +375,9 @@ class Firebase {
     }
   }
 
-  // Write a single MQTT message to Firebase Realtime Database
-  // TODO-Taruun why do we need message, it is saved but never used or send to firebase
-  writeData(date, topic, message, value) {
+  // Write MQTT data to Firebase Realtime Database
+  // Changed: Removed 'message' parameter - only 'value' is needed (message was never used)
+  writeData(date, topic, value) {
     if (!this.initialized) return;
 
     try {
@@ -391,24 +392,29 @@ class Firebase {
         return;
       }
       
-      // Extract parts: org, project, node, and everything else as topic path
+      // Extract parts: org, project, node, and everything else as sensor topic path
       const orgId = parts[0];
       const projectId = parts[1];
       const nodeId = parts[2];
-      // Join remaining parts as topic path (handles both "temperature" and "sht/temperature")
-      const topicPath = parts.slice(3).join('/');
+      // Join remaining parts as sensor topic path (handles both "temperature" and "sht/temperature")
+      // Changed: Renamed from 'topicPath' to 'sensorTopicPath' to avoid confusion with nodeKey
+      const sensorTopicPath = parts.slice(3).join('/');
 
       // Skip if any part is undefined or empty
-      if (!orgId || !projectId || !nodeId || !topicPath) {
+      if (!orgId || !projectId || !nodeId || !sensorTopicPath) {
         console.log('Skipping invalid topic structure:', topic);
         return;
       }
       
       // Check if node filtering is enabled
+      // Changed: Now supports both full paths (dev/developers/esp32-6c5e0e) and node IDs (esp32-6c5e0e)
+      // Uses topic.startsWith() for efficient prefix matching as suggested
       if (this.config.allowedNodes && this.config.allowedNodes.length > 0) {
-        // Check if this node is in the allowed list
-        // TODO-Taruun - this might be much better if keep list of nodes as paths dev/developers/esp1234 and then test using topic.startsWith
-        if (!this.config.allowedNodes.includes(nodeId)) {
+        const nodeTopicPrefix = `${orgId}/${projectId}/${nodeId}`;
+        const isAllowed = this.config.allowedNodes.some(allowedPath => 
+          nodeTopicPrefix.startsWith(allowedPath) || allowedPath === nodeId
+        );
+        if (!isAllowed) {
           if (this.config.verbose) {
             console.log('Skipping node not in allowedNodes:', nodeId);
           }
@@ -417,33 +423,25 @@ class Firebase {
       }
       
       const timestamp = date.valueOf();
-      const topicKey = topicPath.replace(/\//g, '_');
+      const topicKey = sensorTopicPath.replace(/\//g, '_');
       
       // Initialize node storage if needed
-      const nodeKey = `${orgId}/${projectId}/${nodeId}`; // TODO-TARUUN - you already have this defined as topicPath above
+      const nodeKey = `${orgId}/${projectId}/${nodeId}`;
       if (!this.nodeLatestValues[nodeKey]) {
         this.nodeLatestValues[nodeKey] = {};
       }
 
-      // TODO-Taruun Why store a complex data structure like this ? The only thing used from here is the value.
-      // TODO-Taruun you could just save nadeLatestValues[nodekey][topicKey] = value
-      // TODO-Taruun then the copy to lastestData is trivial latedData = nodeLatedValues[nodeKey]
-      // Update the latest value for this specific topic
-      this.nodeLatestValues[nodeKey][topicKey] = {
-        value: value,
-        timestamp: timestamp,   // TODO-Taruun this is never read, why are we saving it?
-        date: date.toISOString(),  // TODO-Taruun this is never read, why are we saving it?
-        raw: message // TODO-Taruun this is never read, why are we saving it?
-      };
+      // Changed: Simplified data structure - store only the value directly
+      // Previously stored {value, timestamp, date, raw} but only value was ever used
+      // This makes the code simpler and more efficient
+      this.nodeLatestValues[nodeKey][topicKey] = value;
       
       // Build simplified path - just nodes/{nodeId}
       const nodePath = `nodes/${nodeId}`;
       
-      // Update "latest" - single object with all current sensor values
-      const latestData = {};
-      for (const [key, data] of Object.entries(this.nodeLatestValues[nodeKey])) {
-        latestData[key] = data.value;
-      }
+      // Update "latest" - copy all sensor values plus timestamp
+      // Changed: Now uses spread operator {...} for simple copy since we store values directly
+      const latestData = {...this.nodeLatestValues[nodeKey]};
       latestData.timestamp = timestamp;
       latestData.date = date.toISOString();
       
