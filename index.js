@@ -55,9 +55,9 @@ class Subscription {
   matches(topic) {
     if (this.topic.includes('+')) {
       function m(x,y) { return (x === y) || (y === '+')}
-      let [ o,p,n,t] = topic.split('/');
-      let [ os,ps,ns,ts] = this.topic.split('/');
-      return m(o,os) && m(p,ps) && m(n,ns) && m(t,ts);
+      let [ o,p,n,t,pp] = topic.split('/');
+      let [ os,ps,ns,ts,pps] = this.topic.split('/');
+      return m(o,os) && m(p,ps) && m(n,ns) && m(t,ts) & m(pp,pps);
     } else {
       return this.topic === topic;
     }
@@ -398,7 +398,8 @@ class Firebase {
       // Skip if not a valid sensor data topic (must have at least 4 parts)
       if (parts.length < 4) {
         if (this.config.verbose) {
-          console.log('Skipping non-sensor topic (too few parts):', topic);
+          //Dont report this - its expected
+          //console.log('Skipping non-sensor topic (too few parts):', topic);
         }
         return;
       }
@@ -430,7 +431,8 @@ class Firebase {
         );
         if (!isAllowed) {
           if (this.config.verbose) {
-            console.log('Skipping node not in allowedNodes:', nodeId);
+            //Not reporting this, would just generate lots of lines for non-firebase nodes
+            //console.log('Skipping node not in allowedNodes:', nodeId);
           }
           return;
         }
