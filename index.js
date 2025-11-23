@@ -447,9 +447,26 @@ class Firebase {
         this.nodeLatestValues[nodeKey] = {};
       }
 
+      // Validate value type before storing
+      // Firebase Realtime Database natively supports: numbers, booleans, strings, objects, arrays
+      // Skip only invalid values that cause Firebase errors: undefined, NaN, Infinity
+      // Note: null is technically valid in Firebase but we skip it as it represents "no data"
+      if (value === undefined || value === null || 
+          (typeof value === 'number' && (isNaN(value) || !isFinite(value)))) {
+        if (this.config.verbose) {
+          console.log('Skipping invalid value for Firebase:', topic, value);
+        }
+        return;
+      }
+
       // Changed: Simplified data structure - store only the value directly
       // Previously stored {value, timestamp, date, raw} but only value was ever used
       // This makes the code simpler and more efficient
+      // Supports all Firebase-compatible types:
+      //   - Numbers: int (0, 1, 100) and float (25.3, 43.2)
+      //   - Booleans: true/false (for relay states, on/off indicators)
+      //   - Strings: text data
+      //   - Objects/Arrays: complex data structures
       this.nodeLatestValues[nodeKey][topicKey] = value;
       
       // Build simplified path - just nodes/{nodeId}

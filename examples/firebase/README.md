@@ -43,6 +43,17 @@ npm install
 npm start
 ```
 
+## Supported Data Types
+
+Firebase integration supports all sensor data types:
+
+- **Numbers**: Temperature (25.3), humidity (43.2), soil moisture (450)
+- **Booleans**: Relay states (true/false), on/off indicators
+- **Strings**: Text data, status messages
+- **Objects/Arrays**: Complex data structures
+
+Invalid values (undefined, null, NaN, Infinity) are automatically skipped.
+
 ## Firebase Data Structure
 
 ### Simple Structure

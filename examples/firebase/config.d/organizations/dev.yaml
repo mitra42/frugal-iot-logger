@@ -69,6 +69,14 @@ projects:
                 duplicates:
                   significantdate: 60000
                   significantvalue: 1
+              relay:
+                type: bool
+              ledbuiltin:
+                type: bool
+              on:
+                type: bool
+              loadcell:
+                type: float
   magi:
     name: Magi Farm
     nodes:
@@ -104,6 +112,17 @@ projects:
             duplicates:
               significantdate: 60000
               significantvalue: 100
+        sub:
+          +:
+            topics:
+              relay:
+                type: bool
+              ledbuiltin:
+                type: bool
+              on:
+                type: bool
+              loadcell:
+                type: float
   developers:
     name: Developers
     nodes:
@@ -135,3 +154,13 @@ projects:
                 duplicates:
                   significantdate: 60000
                   significantvalue: 1
+          +:
+            topics:
+              relay:
+                type: bool
+              ledbuiltin:
+                type: bool
+              on:
+                type: bool
+              loadcell:
+                type: float
