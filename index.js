@@ -68,8 +68,8 @@ class Subscription {
       let ld = this.lastdate[topic] || 0;
       let lv = this.lastvalue[topic] || 0;
       if ((date === ld) && (value === lv)) return true; // Eliminate any exact duplicates
-      if (rules.significantvalue && (Math.abs(value - lv) > rules.significantvalue)) { return false; }
-      if (rules.significantdate && ((date-ld) > rules.significantdate)) { return false; }
+      if (rules.significantvalue && (Math.abs(value - lv) >= rules.significantvalue)) { return false; }
+      if (rules.significantdate && ((date-ld) >= rules.significantdate)) { return false; }
       if (rules.significantdate || rules.significantvalue) { return true; } // Conditions but didn't meet any of them
     }
     return false; // No conditions or no rules (e.g. for discovery at org/project=node
@@ -370,7 +370,18 @@ class Firebase {
       // Data has changed - add timestamp and save
       historyData.timestamp = Date.now();
       historyData.date = new Date().toISOString();
-      
+
+      this.db.ref(`${nodePath}/history`).push(historyData, (err) => {
+        if (err) {
+          console.error('Firebase history write error:', err);
+        } else {
+          this.lastWrittenHistory[nodeKey] = historyDataString;
+          if (this.config.verbose) {
+            console.log('Firebase history saved:', nodeId, `(${sensorCount} sensors)`);
+          }
+        }
+      });
+      /*
       // Save to Firebase
       this.db.ref(`${nodePath}/history`).push(historyData)
         .then(() => {
@@ -383,6 +394,8 @@ class Firebase {
         .catch((error) => {
           console.error('Firebase history write error:', error);
         });
+
+       */
     }
   }
 
@@ -477,17 +490,17 @@ class Firebase {
       const latestData = {...this.nodeLatestValues[nodeKey]};
       latestData.timestamp = timestamp;
       latestData.date = date.toISOString();
-      
-      this.db.ref(`${nodePath}/latest`).set(latestData)
-        .then(() => {
+
+      this.db.ref(`${nodePath}/latest`).set(latestData, (err) => {
+        if (err) {
+          console.error('Firebase latest update error:', err);
+        } else {
           if (this.config.verbose) {
             console.log('Firebase latest updated:', nodeId);
           }
-        })
-        .catch((error) => {
-          console.error('Firebase latest update error:', error);
-        });
-      
+        }
+      });
+
       // Note: History is saved periodically by timer, not on every sensor update
       
     } catch (error) {
