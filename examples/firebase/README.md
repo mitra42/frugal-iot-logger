@@ -24,15 +24,30 @@ This Firebase integration automatically uploads MQTT sensor data to Firebase Rea
 
 Edit `examples/firebase/config.d/organizations/dev.yaml`:
 
+**Single Firebase instance:**
 ```yaml
 firebase:
   serviceAccount: ./firebase-service-account.json
   databaseURL: https://your-project.firebaseio.com
   verbose: false
-  trackLatest: true
   allowedNodes:
     - esp32-6c5e0e
     - esp32-3c7ab8
+```
+
+**Multiple Firebase instances (e.g., different projects or regions):**
+```yaml
+firebase:
+  - serviceAccount: ./firebase-prod.json
+    databaseURL: https://prod-project.firebaseio.com
+    historyIntervalSeconds: 60
+    allowedNodes:
+      - esp32-6c5e0e
+  - serviceAccount: ./firebase-backup.json
+    databaseURL: https://backup-project.firebaseio.com
+    historyIntervalSeconds: 300
+    allowedNodes:
+      - esp32-3c7ab8
 ```
 
 ### 3. Run
@@ -117,6 +132,20 @@ firebase:
     - esp32-6c5e0e
     - esp32-3c7ab8
 ```
+
+## Multiple Firebase Instances
+
+You can configure multiple Firebase instances to:
+- Send data to different Firebase projects
+- Separate production and backup databases
+- Use different regions for redundancy
+- Apply different `allowedNodes` filters per instance
+
+Each instance runs independently with its own:
+- Service account credentials
+- Database URL
+- History interval
+- Node filtering rules
 
 ## Node Filtering
 
