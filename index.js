@@ -122,7 +122,7 @@ class MqttOrganization {
     this.projects = {};
     this.subscriptions = [];
     this.gsheets = [];
-    this.firebase = null;
+    this.firebases = [];
   }
 
   mqtt_status_set(k) {
@@ -237,14 +237,16 @@ class MqttOrganization {
   // Called by s.dispatch, currently all the same
   messageReceived(date, topic, message) {
       this.log(date, topic, message);
-      // Send to Firebase if configured
-      if (this.firebase) {
+      // Send to all Firebase instances if configured
+      if (this.firebases.length > 0) {
         // Find the subscription to get the parsed value (already converted to correct type)
         let s = this.subscriptions.find(s => s.matches(topic));
         let value = s ? s.currentvalue[topic] : message;
         // Pass only value (not message) - message is raw string, value is parsed/typed
-        // Filtering by allowedNodes happens inside writeData
-        this.firebase.writeData(date, topic, value);
+        // Filtering by allowedNodes happens inside writeData for each instance
+        for (let fb of this.firebases) {
+          fb.writeData(date, topic, value);
+        }
       }
   }
   log(date, topic, message) {
@@ -282,12 +284,19 @@ class MqttOrganization {
   }
 
   // Initialize Firebase integration if configured in the organization's YAML config
-  // Pattern matches gsheetsSubscribe - create instance, store reference, then start
+  // Pattern matches gsheetsSubscribe - supports multiple Firebase instances
   firebaseSubscribe() {
-    if (this.config_org.firebase) {
-      let fb = new Firebase(this.config_org.firebase, this);
-      this.firebase = fb;
-      fb.start();
+    if (this.firebases.length === 0) { // connect is called after onReconnect - do not re-add subscriptions
+      let o = this.config_org;
+      if (o.firebase) {
+        // Support both single config object and array of configs
+        const configs = Array.isArray(o.firebase) ? o.firebase : [o.firebase];
+        for (let fbconfig of configs) {
+          let fb = new Firebase(fbconfig, this);
+          this.firebases.push(fb);
+          fb.start();
+        }
+      }
     }
   }
 }  // MqttOrganization
