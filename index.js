@@ -237,7 +237,7 @@ class MqttOrganization {
   // Called by s.dispatch, currently all the same
   messageReceived(date, topic, message) {
       this.log(date, topic, message);
-      // Send to all Firebase instances if configured
+      // Send to all Firebase instances if configured - Google sheets doesnt do anything at the per-message level
       if (this.firebases.length > 0) {
         // Find the subscription to get the parsed value (already converted to correct type)
         let s = this.subscriptions.find(s => s.matches(topic));
@@ -245,7 +245,7 @@ class MqttOrganization {
         // Pass only value (not message) - message is raw string, value is parsed/typed
         // Filtering by allowedNodes happens inside writeData for each instance
         for (let fb of this.firebases) {
-          fb.writeData(date, topic, value);
+          fb.handleMessage(date, topic, value);
         }
       }
   }
@@ -301,18 +301,49 @@ class MqttOrganization {
   }
 }  // MqttOrganization
 
-// ================== Firebase Integration ========================
-class Firebase {
+// ================== Forwarder - base class for Firebase, Gsheet, etc. ========================
+class Forwarder {
   constructor(config, org) {
     this.config = config;
     this.org = org;
-    this.db = null;
+    this.periodicTimer = null;
     this.initialized = false;
+  }
+
+  start() {
+    if (this.config.intervalSeconds) {
+      // If intervalSeconds unset,skip the tick() functionality
+      this.periodicTimer = setInterval(this.tick.bind(this), this.config.intervalSeconds * 1000);
+    }
+    this.initialized = true;
+    // Subclasses will add to this.
+  }
+  // Clean up resources when stopping - not currently used
+  stop() {
+    if (this.periodicTimer) {
+      clearInterval(this.periodicTimer);
+      this.periodicTimer = null;
+    }
+    this.initialized = false;
+  }
+  makeRow() {
+    // Set up an array with the values of the topics we are monitoring in the same order as in the configuration
+    return this.config.topics
+      .map((topic) => this.org.findLastValue(topic));
+  }
+  handleMessage(date, topic, message) {
+    // Default does nothing - subclasses can override if needed
+  }
+}
+// ================== Firebase Integration ========================
+class Firebase extends Forwarder {
+  constructor(config, org) {
+    super(config, org);
+    this.db = null;
     // Store latest values for each node to create snapshots
     this.nodeLatestValues = {}; // { nodeKey: { topicKey: value } } - simplified structure
     // Track last written history to avoid duplicates when nodes are asleep
     this.lastWrittenHistory = {}; // { nodeKey: JSON string of last history data }
-    this.historyTimer = null;
   }
 
   start() {
@@ -327,27 +358,12 @@ class Firebase {
         });
       }
       this.db = admin.database();
-      this.initialized = true;
       console.log('Firebase initialized for org:', this.org.id);
-      
-      // Start periodic history saving
-      const historyInterval = (this.config.historyIntervalSeconds || 60) * 1000;
-      this.historyTimer = setInterval(() => {
-        this.saveHistoryForAllNodes();
-      }, historyInterval);
-      
+      super.start(); // Start timer
+
     } catch (error) {
       console.error('Firebase initialization failed:', error);
     }
-  }
-  
-  // Clean up resources when stopping
-  stop() {
-    if (this.historyTimer) {
-      clearInterval(this.historyTimer);
-      this.historyTimer = null;
-    }
-    this.initialized = false;
   }
   
   saveHistoryForAllNodes() {
@@ -407,7 +423,9 @@ class Firebase {
        */
     }
   }
-
+  tick() {
+    this.saveHistoryForAllNodes();
+  }
   // Write MQTT data to Firebase Realtime Database
   // Changed: Removed 'message' parameter - only 'value' is needed (message was never used)
   writeData(date, topic, value) {
@@ -481,9 +499,6 @@ class Firebase {
         return;
       }
 
-      // Changed: Simplified data structure - store only the value directly
-      // Previously stored {value, timestamp, date, raw} but only value was ever used
-      // This makes the code simpler and more efficient
       // Supports all Firebase-compatible types:
       //   - Numbers: int (0, 1, 100) and float (25.3, 43.2)
       //   - Booleans: true/false (for relay states, on/off indicators)
@@ -516,23 +531,21 @@ class Firebase {
       console.error('Firebase write failed:', error);
     }
   }
+  handleMessage(date, topic, value) {
+    this.writeData(date, topic, value);
+  }
 }
-class Gsheet {
+class Gsheet extends Forwarder {
   constructor(config, org) {
-    this.config = config;
-    this.org = org;
+    super(config, org);
   }
   start() {
-    //https://developer.mozilla.org/docs/Web/API/setInterval
-    setInterval(this.tick.bind(this), this.config.intervalSeconds * 1000);
-    // No authentication or initialization required for Gsheets
+    super.start();
   }
 
   // This function runs periodically and writes to the Google spreadsheet
   tick() {
-    // Set up an array with the values of the topics we are monitoring in the same order as in the configuration
-    let row = this.config.topics
-      .map((topic) => this.org.findLastValue(topic));
+    let row = this.makeRow(); // array of values, no date since date is typically system dependent
     // The first column is always the date
     let date = new Date();
     // Google sheets wants ISO format, but will fail if it has the Z on the end. So sending e.g. 2025-07-25T10:20:01
@@ -558,13 +571,14 @@ class Gsheet {
     })
     //TODO-9 comment out on success
     .then(data => {
-      //console.log('Success:', this.config.url, data); // Log the successful response data
+      console.log('Success:', this.config.url, data); // Log the successful response data
     })
     .catch(error => {
       console.error('Error:', error); // Log any errors during the fetch operation
     });
  }
 }
+// ================== Main Logger Class ========================
 class MqttLogger {
   constructor() {
     this.clients = {};

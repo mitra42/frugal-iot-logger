@@ -14,7 +14,7 @@ firebase:
   # Optional: maintain a "latest" value for each topic for quick access
   trackLatest: true
   # Optional: How often to save history snapshots (in seconds, default: 60)
-  historyIntervalSeconds: 60
+  intervalSeconds: 60
   # Optional: Only save data from specific nodes (leave empty or remove to allow all nodes)
   allowedNodes:
     - esp32-6c5e0e
