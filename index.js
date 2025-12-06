@@ -509,18 +509,23 @@ class Firebase extends Forwarder {
       // Build simplified path - just nodes/{nodeId}
       const nodePath = `nodes/${nodeId}`;
       
-      // Update "latest" - copy all sensor values plus timestamp
-      // Changed: Now uses spread operator {...} for simple copy since we store values directly
-      const latestData = {...this.nodeLatestValues[nodeKey]};
-      latestData.timestamp = timestamp;
-      latestData.date = date.toISOString();
+      // Update "latest" - only write the specific sensor value that changed
+      // Changed: Use update() instead of set() for efficiency
+      // Previously wrote ALL sensor values on every MQTT message (very inefficient)
+      // Now only writes the single value that changed + timestamp
+      // e.g., when sht_temperature arrives, only writes to nodes/esp12345/latest/sht_temperature
+      const updateData = {
+        [topicKey]: value,
+        timestamp: timestamp,
+        date: date.toISOString()
+      };
 
-      this.db.ref(`${nodePath}/latest`).set(latestData, (err) => {
+      this.db.ref(`${nodePath}/latest`).update(updateData, (err) => {
         if (err) {
           console.error('Firebase latest update error:', err);
         } else {
           if (this.config.verbose) {
-            console.log('Firebase latest updated:', nodeId);
+            console.log('Firebase latest updated:', nodeId, topicKey);
           }
         }
       });
