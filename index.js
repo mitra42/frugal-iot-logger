@@ -393,8 +393,8 @@ class Firebase extends Forwarder {
       }
       
       // Data has changed - add timestamp and save
+      // Note: ISO date string can be derived client-side: new Date(timestamp).toISOString()
       historyData.timestamp = Date.now();
-      historyData.date = new Date().toISOString();
 
       this.db.ref(`${nodePath}/history`).push(historyData, (err) => {
         if (err) {
@@ -514,10 +514,10 @@ class Firebase extends Forwarder {
       // Previously wrote ALL sensor values on every MQTT message (very inefficient)
       // Now only writes the single value that changed + timestamp
       // e.g., when sht_temperature arrives, only writes to nodes/esp12345/latest/sht_temperature
+      // Note: ISO date string can be derived client-side: new Date(timestamp).toISOString()
       const updateData = {
         [topicKey]: value,
-        timestamp: timestamp,
-        date: date.toISOString()
+        timestamp: timestamp
       };
 
       this.db.ref(`${nodePath}/latest`).update(updateData, (err) => {
