@@ -16,3 +16,7 @@ firebase-service-account.json
 # Environment files
 .env
 .env.local
+
+# Data
+examples/gsheets/data/
+examples/standalone/data/
