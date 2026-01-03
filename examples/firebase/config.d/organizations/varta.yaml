@@ -1,0 +1,75 @@
+# Configuration for VARTA organization with Firebase integration
+mqtt_password: your-mqtt-password
+userid: your-userid
+name: varta
+
+
+# Firebase configuration
+firebase:
+  # Path to your Firebase service account JSON file
+  serviceAccount: ./firebase-service-account.json
+  # Your Firebase Realtime Database URL
+  databaseURL: "https://your-project-id.firebaseio.com"
+  # Optional: log each write operation
+  verbose: true
+  # Optional: maintain a "latest" value for each topic for quick access
+  trackLatest: true
+  # Optional: How often to save history snapshots (in seconds, default: 60)
+  intervalSeconds: 60
+  # No allowedNodes filter - allow ALL nodes from this organization
+
+projects:
+  developers:
+    name: Developers
+    nodes:
+      +:
+        topics:
+          battery:
+            type: int
+            duplicates:
+              significantdate: 60000
+              significantvalue: 100
+        sub:
+          sht:
+            topics:
+              humidity:
+                type: float
+                duplicates:
+                  significantdate: 60000
+                  significantvalue: 0.5
+              temperature:
+                type: float
+                duplicates:
+                  significantdate: 60000
+                  significantvalue: 0.5
+          ds18b20:
+            topics:
+              ds18b20:
+                type: float
+                duplicates:
+                  significantdate: 60000
+                  significantvalue: 1
+          soil:
+            topics:
+              soil:
+                type: int
+                duplicates:
+                  significantdate: 60000
+                  significantvalue: 1
+          battery:
+            topics:
+              battery:
+                type: int
+                duplicates:
+                  significantdate: 60000
+                  significantvalue: 100
+          +:
+            topics:
+              relay:
+                type: bool
+              ledbuiltin:
+                type: bool
+              on:
+                type: bool
+              loadcell:
+                type: float

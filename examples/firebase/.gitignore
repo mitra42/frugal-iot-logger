@@ -1,0 +1,12 @@
+# Firebase service account JSON files (contain private keys)
+*-firebase-adminsdk-*.json
+firebase-service-account.json
+
+# Node modules
+node_modules/
+
+# Data files
+data/
+
+# Local config overrides (if any)
+*.local.yaml

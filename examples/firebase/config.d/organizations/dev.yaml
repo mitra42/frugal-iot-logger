@@ -16,9 +16,10 @@ firebase:
   # Optional: How often to save history snapshots (in seconds, default: 60)
   intervalSeconds: 60
   # Optional: Only save data from specific nodes (leave empty or remove to allow all nodes)
-  allowedNodes:
-    - esp32-6c5e0e
-    - esp32-3c7ab8
+  # Commented out to prevent sending data - uncomment and add node IDs to enable
+  # allowedNodes:
+  #   - esp32-6c5e0e
+  #   - esp32-3c7ab8
 
 projects:
   lotus:
@@ -154,6 +155,13 @@ projects:
                 duplicates:
                   significantdate: 60000
                   significantvalue: 1
+          battery:
+            topics:
+              battery:
+                type: int
+                duplicates:
+                  significantdate: 60000
+                  significantvalue: 100
           +:
             topics:
               relay:
