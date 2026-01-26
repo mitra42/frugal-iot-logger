@@ -554,7 +554,7 @@ class Gsheet extends Forwarder {
     // The first column is always the date
     let date = new Date();
     // Google sheets wants ISO format, but will fail if it has the Z on the end. So sending e.g. 2025-07-25T10:20:01
-    row.unshift(date.toISOString().substring(0,19)); // First column is date // TODO-9 check this is correct format for date in gsheet
+    row.unshift(date.toISOString().substring(0,19)); // First column is date
     // Sending the target sheet, but for now it is ignored
     let dataToSend = {
       sheet: this.config.sheet,
@@ -574,10 +574,10 @@ class Gsheet extends Forwarder {
         throw new Error(`Failed to append to ${this.config.url} status: ${response.status}`);
       }
     })
-    //TODO-9 comment out on success
+    /* -debugging
     .then(data => {
       console.log('Success:', this.config.url, data); // Log the successful response data
-    })
+    }) */
     .catch(error => {
       console.error('Error:', error); // Log any errors during the fetch operation
     });
