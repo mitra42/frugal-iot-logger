@@ -7,9 +7,9 @@
   "bugs": "https://github.com/mitra42/frugal-iot-logger/issues",
   "dependencies": {
     "async": "^3.2.6",
-    "firebase-admin": "^12.0.0",
-    "js-yaml": "^4.1.0",
-    "mqtt": "^5.10.1"
+    "firebase-admin": "^12.7.0",
+    "js-yaml": "^4.1.1",
+    "mqtt": "^5.15.0"
   },
   "description": "Frugal IoT logger",
   "homepage": "https://github.com/mitra42/frugal-iot",
