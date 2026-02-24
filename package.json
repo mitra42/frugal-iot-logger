@@ -9,7 +9,8 @@
     "async": "^3.2.6",
     "firebase-admin": "^12.7.0",
     "js-yaml": "^4.1.1",
-    "mqtt": "^5.15.0"
+    "mqtt": "^5.15.0",
+    "array.prototype.tospliced": "^1.1.5"
   },
   "description": "Frugal IoT logger",
   "homepage": "https://github.com/mitra42/frugal-iot",
@@ -25,5 +26,5 @@
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "type": "module",
-  "version": "1.1.8"
+  "version": "1.1.9"
 }
