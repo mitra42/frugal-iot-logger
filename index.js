@@ -66,6 +66,8 @@ function isDuplicate(date, topic, value, rules, lastdate, lastvalue) {
 function valueFromText(message, type) {
   switch(type) {
     case "bool":
+      if (message === "true") return 1;
+      if (message === "false") return 0;
       return Number(message); // Message "0" or "1" and want to store number anyway
     case "float":
       return Number(message)
@@ -256,7 +258,12 @@ class MqttOrganization {
     } // Not logging parms
     if (topicPathArray[2] === "set") {
       //console.log("XXX rejecting set in", topicPath);
-      return false;
+      // LEGACY - see https://github.com/mitra42/frugal-iot-logger/issues/17
+      // Remove the "set" from the path so it can match the schema
+      // This is a legacy workaround for old devices that publish to "org/project/node/set/module/leaf" and don't echo back "org/project/node/module/leaf"
+      // Its particularly needed for relay/on
+      topicPathArray.splice(2,1);
+      //return false;
     } // If change this, will need to snip the "set" out the array
     if (legacymodules.includes(topicPathArray[2]) || legacytopics.includes(topicPathArray[3])) {
       //console.log("XXX rejecting legacy in", topicPath);
