@@ -1,0 +1,193 @@
+# This structure defines each of the modules (sensors, actuators, controls) that can be discovered
+# Please add new modules here, in alphabetical order
+# Each module contains inputs &/o outputs, each of which should have
+#
+# Each module has
+# name: Capitalized English (and add translation below in 'languages')
+# topics: list of topics, each with leaf, optionally leaf_from if it should be copied, and optionally any fields of topics to be overridden
+# slot: if it is supposed to fit in a specific slot of frugaliot
+# insidefrugaliot: true if it should be hidden inside the Frugal_IoT drop-down on the name of a sensor, false or not set if it should be shown as a separate module
+battery:
+  name: "Battery"
+  insidefrugaliot: true
+  topics:
+    - leaf:   battery
+button:
+  name: Button
+  topics:
+    - leaf:     button
+controlblinken:
+  name: "Control Blinken"
+  topics:
+    - leaf:     timeon
+    - leaf:     timeoff
+    - leaf:     out
+climate:
+  name: Climate
+  topics:
+    - leaf: temperature_now
+      leaf_from: controlfloat
+      name: Temperature Now
+    - leaf: temperature_setpoint
+      leaf_from: controlfloat
+      wireable: false
+      name: Temperature Setpoint
+    - leaf: temperature_hysteresis
+      leaf_from: controlfloat
+      wireable: false
+      name: Temperature Hysteresis
+    - leaf: humidity_now
+      leaf_from: controlfloat
+      name: Humidity Now
+    - leaf: humidity_setpoint
+      leaf_from: controlfloat
+      name: Humidity Setpoint
+      wireable: false
+    - leaf: humidity_hysteresis
+      leaf_from: controlfloat
+      name: Humidity Hysteresis
+      wireable: false
+    - leaf: temperature_out
+      leaf_from: controlouttoggle
+      name: Temperature Out
+    - leaf: humidity_out
+      leaf_from: controlouttoggle
+      name: Humidity Out
+controlhysteresis:
+  name: Control
+  topics:
+    - leaf: now
+      leaf_from: controlfloat
+      name: Now
+    - leaf: greater
+      leaf_from: controlintoggle
+      name: Greater Than
+    - leaf: limit
+      leaf_from:  controlfloat
+      name: Limit
+    - leaf: hysterisis
+      leaf_from: controlfloat
+      name: Hysterisis
+      max:  100
+      wireable: false
+    - leaf: out
+      leaf_from: controlouttoggle
+      name: Out
+# Some nodes have misspeeled id for this control
+controlhysterisis:
+  name: Control
+  topics:
+    - leaf: now
+      leaf_from: controlfloat
+      name: Now
+    - leaf: greater
+      leaf_from: controlintoggle
+      name: Greater Than
+    - leaf: limit
+      leaf_from:  controlfloat
+      name: Limit
+    - leaf: hysterisis
+      leaf_from: controlfloat
+      name: Hysterisis
+      max:  100
+      wireable: false
+    - leaf: out
+      leaf_from: controlouttoggle
+      name: Out
+# Some nodes have wrong id for this control
+Control_Hysterisis:
+  name: Control
+  topics:
+    - leaf: now
+      leaf_from: controlfloat
+      name: Now
+    - leaf: greater
+      leaf_from: controlintoggle
+      name: Greater Than
+    - leaf: limit
+      leaf_from:  controlfloat
+      name: Limit
+    - leaf: hysterisis
+      leaf_from: controlfloat
+      name: Hysterisis
+      max:  100
+      wireable: false
+    - leaf: out
+      leaf_from: controlouttoggle
+      name: Out
+dht:
+  name: "DHT"
+  topics:
+    - leaf: temperature
+    - leaf: humidity
+ds18b20:
+  name: "Soil Temperature"
+  topics:
+    - leaf: ds18b20
+      leaf_from: temperature
+ensaht:
+  name: "ENS AHT"
+  topics:
+    - leaf:  temperature
+    - leaf:  humidity
+    - leaf:  aqi
+    - leaf:  tvoc
+    - leaf:  eco2
+    - leaf:  agi500
+frugal_iot:
+  name: XXX
+  topics:
+    - leaf:     id
+    - leaf:     name
+    - leaf:     description
+    - leaf:     lastseen
+health:
+  name: System
+  insidefrugaliot: true
+  topics:
+    - leaf:     wifibars
+    - leaf:     wifissid
+ht:
+  name: HT
+  topics:
+    - leaf: temperature
+    - leaf: humidity
+ledbuiltin:
+  name: LED
+  slot: ledbuiltin
+  insidefrugaliot: true
+  topics:
+    - leaf:     on
+    - leaf:     color
+    - leaf:     brightness
+loadcell:
+  name: Load Cell
+  topics:
+    - leaf:     loadcell
+lux:
+  name: Light meter
+  topics:
+    - leaf:     lux
+ms5803:
+  name: MS5803
+  topics:
+    - leaf: pressure
+    - leaf: temperature
+ota:
+  name: OTA
+  insidefrugaliot: true
+  topics:
+    - leaf:     key
+relay:
+  name: Relay
+  topics:
+    - leaf:     on
+sht:
+  name: SHT
+  topics:
+    - leaf: temperature
+    - leaf: humidity
+soil:
+  name: Soil
+  topics:
+    - leaf: soil

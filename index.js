@@ -12,6 +12,14 @@ import yaml from 'js-yaml'; // https://www.npmjs.com/package/js-yaml
 import { appendFile, mkdir, readFile, readdir } from "fs"; // https://nodejs.org/api/fs.html
 import mqtt from 'mqtt'; // https://www.npmjs.com/package/mqtt
 import admin from 'firebase-admin'; // Firebase Admin SDK
+//import tospliced from 'array.prototype.tospliced'; // tospliced only in Node > 20 (and webstorm currently 18)
+
+// =======
+// Ignore any of these legacy topic - should go away when MQTT memory next cleared as not in any current device
+// Still there as of 2026-02-24
+// Note - not being in this list should not be a problem - it will be ignored since type not found
+const legacytopics = ["wifistrength", "state", "co2", "auto", "reboot", "temp_setpoint", "temp_hysteresis", "temp_out"];
+const legacymodules = ["blinken_out"];
 
 // =========== Some generic helper functions, not specific to this client ========
 // Clean any leading "/" or "../" from a string so it can be safely appended to a path
@@ -20,102 +28,101 @@ function sanitizeUrl(t) {
   return (t.replaceAll("../",""));
 }
 
-function findMostGranular(o, topicpath, f) {
-  let i = topicpath.indexOf('/');
-  let n = (i < 0) ? topicpath : topicpath.substring(0, i);
-  let topicrest = (i < 0) ? null : topicpath.substring(i + 1);
-  if (topicrest) {
+// TODO-8 rework this,
+// Currently specific to structure of config.d/organizations/*yaml
+// Allow overrides in config.d/organizations/*yaml but simplify to look like modules or topics
+function findMostGranular(o, topicPathArray, f) {
+  let n = topicPathArray[0]  // current segment may be undefined but shouldn't be
+  if (topicPathArray.length > 1) {
+    let topicRestArray = topicPathArray.toSpliced(0,1); // If this fails, you are running on an old (<20) version of node
     let oo = o.projects || o.nodes || o.sub // Next step depends on if org, project, node or topic
+    // Recurse on remaining path, note always want the deepest possible
     return (
-      (oo[n] && findMostGranular(oo[n], topicrest, f))
-      || (oo['+'] && findMostGranular(oo['+'], topicrest, f))
-    );
-  } else { // No more path, so look for n.field
+      oo && (
+        (oo[n] && findMostGranular(oo[n], topicRestArray, f))
+        || (oo['+'] && findMostGranular(oo['+'], topicRestArray, f))
+      ));
+  } else { // We are at the leaf, no more path, so look for n.field
     let oo = o.topics // Next step depends on if org, project, node or topic
     return (
-      ((typeof (f) === 'string') && oo[n][f])
-      || ((typeof (f) === 'function') && f(oo[n]))
+      ((typeof (f) === 'string') && oo[n] && oo[n][f])
+      || ((typeof (f) === 'function') && oo[n] && f(oo[n])) // f is never currerntly a function (Feb2026)
     );
   }
 }
 
+function isDuplicate(date, topic, value, rules, lastdate, lastvalue) {
+  if (rules) {
+    let ld = lastdate || 0;
+    let lv = lastvalue || 0;
+    if ((date === ld) && (value === lv)) return true; // Eliminate any exact duplicates
+    if (rules.significantvalue && (Math.abs(value - lv) >= rules.significantvalue)) { return false; }
+    if (rules.significantdate && ((date-ld) >= rules.significantdate)) { return false; }
+    if (rules.significantdate || rules.significantvalue) { return true; } // Conditions but didn't meet any of them
+  }
+  return false; // No conditions or no rules (e.g. for discovery at org/project=node
+}
+// NOTE same function in frugal-iot-logger and frugal-iot-client if change here, change there
+function valueFromText(message, type) {
+  switch(type) {
+    case "bool":
+      return Number(message); // Message "0" or "1" and want to store number anyway
+    case "float":
+      return Number(message)
+    case "int":
+      return Number(message)
+    case "topic":
+      return message;
+    case "text":
+      return message;
+    case "color":
+      return message; // TODO should ideally convert to a rgb hex so can log
+    case "yaml":
+      // noinspection JSUnusedGlobalSymbols
+      return yaml.load(message, {onWarning: (warn) => console.log('Yaml warning:', warn)});
+    default:
+      console.error(`Unrecognized message type: ${type}`);
+  }
+}
 // Class with one object per subscription including de-duplication rules.
 // Subscriptions are held under the Organization level, and can include wild-card subscriptions.
 class Subscription {
-  constructor(topic, qos, duplicates, type, cb) {
+  constructor(topic, qos, cb) {
     this.topic = topic;
     this.qos = qos;
-    this.type = type;
     this.cb = cb;
-    this.currentvalue = {};
-    this.lastdate = {};
-    this.lastvalue = {};
-    this.duplicates = duplicates; // Rules to follow
   }
   matches(topic) {
     if (this.topic.includes('+')) {
-      function m(x,y) { return (x === y) || (y === '+')}
-      let [ o,p,n,t,pp] = topic.split('/');
-      let [ os,ps,ns,ts,pps] = this.topic.split('/');
-      return m(o,os) && m(p,ps) && m(n,ns) && m(t,ts) & m(pp,pps);
+      function m(x, y) {
+        return (x === y) || (y === '+')
+      }
+
+      let [o, p, n, t, pp] = topic.split('/');
+      let [os, ps, ns, ts, pps] = this.topic.split('/');
+      return m(o, os) && m(p, ps) && m(n, ns) && m(t, ts) & m(pp, pps);
+    } else if (this.topic.endsWith('#')) {
+      return topic.startsWith(this.topic.substring(0,this.topic.length-1))
     } else {
       return this.topic === topic;
     }
   }
-  isDuplicate(date, topic, value) {
-    let rules = this.duplicates;
-    if (rules) {
-      let ld = this.lastdate[topic] || 0;
-      let lv = this.lastvalue[topic] || 0;
-      if ((date === ld) && (value === lv)) return true; // Eliminate any exact duplicates
-      if (rules.significantvalue && (Math.abs(value - lv) >= rules.significantvalue)) { return false; }
-      if (rules.significantdate && ((date-ld) >= rules.significantdate)) { return false; }
-      if (rules.significantdate || rules.significantvalue) { return true; } // Conditions but didn't meet any of them
-    }
-    return false; // No conditions or no rules (e.g. for discovery at org/project=node
-  }
-
   dispatch(topic, message) {
-    // Dispatch, but don't dispatch duplicates
-    let value = this.valueFromText(message);
+    // Dispatch, duplicate checking done on MqttOrganization.dispatch
     let date = new Date();
-    this.currentvalue[topic] = value; // Save current value for e.g. Gsheets
-    if (!this.isDuplicate(date, topic, value)) {
-      this.lastdate[topic] = date;
-      this.lastvalue[topic] = value;
-      this.cb(date, topic, message);
-    }
+    this.cb(date, topic, message);
   }
 
-  // NOTE same function in frugal-iot-logger and frugal-iot-client if change here, change there
-  valueFromText(message) {
-    switch(this.type) {
-      case "bool":
-        return Number(message); // Message "0" or "1" and want to store number anyway
-      case "float":
-        return Number(message)
-      case "int":
-        return Number(message)
-      case "topic":
-        return message;
-      case "text":
-        return message;
-      case "yaml":
-        // noinspection JSUnusedGlobalSymbols
-        return yaml.load(message, {onWarning: (warn) => console.log('Yaml warning:', warn)});
-      default:
-        console.error(`Unrecognized message type: ${this.type}`);
-    }
-  }
 }
 // ================== MQTT Client embedded in server ========================
 
 // Manages a connection to a broker - each organization needs its own connection
 class MqttOrganization {
-  constructor(id, config_org, config_mqtt) {
+  constructor(id, config_org, config_mqtt, config_schema) {
     this.id = id;
     this.config_org = config_org; // Config structure currently: { name, mqtt_password, projects: { id: { topics: { temperature , humidity }
     this.config_mqtt = config_mqtt; // { broker }
+    this.config_schema = config_schema; // { topics, modules }
     this.mqtt_client = null; // Object from library
     // noinspection JSUnusedGlobalSymbols
     this.status = "constructing"; // Note that the status isn't currently available anywhere
@@ -123,7 +130,10 @@ class MqttOrganization {
     this.subscriptions = [];
     this.gsheets = [];
     this.firebases = [];
-  }
+    this.currentValue = {}
+    this.lastDate = {};
+    this.lastValue = {};
+    }
 
   mqtt_status_set(k) {
     console.log('mqtt', this.id, k);
@@ -179,53 +189,36 @@ class MqttOrganization {
     this.mqtt_client.subscribe(topic, {qos: qos}, this.subErr);
   }
 
-  subscribe(topic, qos, duplicates, type, cb) {
+  subscribe(topic, qos, cb) {
     this.mqtt_subscribe(topic, qos);
-    this.subscriptions.push(new Subscription(topic, qos, duplicates, type, cb));
+    this.subscriptions.push(new Subscription(topic, qos, cb));
   }
   quickdiscover(date, topic, message) {
     // Save a record of a quickdiscover message so we know when last seen
     // topic = "orgid/projectid"  message = "nodeid"
     let pid = topic.split('/')[1];
     let nid = message;
-    if (!this.projects[pid]) { this.projects[pid] = {}; }
+    if (!this.projects[pid]) { this.projects[pid] = {}; }  // Make sure a projects obj exists
     //console.log("XXX client11",pid,nid,date)
-    this.projects[pid][nid] = date;
+    this.projects[pid][nid] = date; // Record last time we saw this node
   }
   // noinspection JSUnusedLocalSymbols
   watchProject(pid, p) {
     // Things to do regarding the project, other than subscribing based on config
     // Watch for quickdiscover messages and record last time node seen
-    this.subscribe(`${this.id}/${pid}`, 0, null, "text", this.quickdiscover.bind(this));
+    this.subscribe(`${this.id}/${pid}`, 0, this.quickdiscover.bind(this));
   }
   configSubscribe() {
     // noinspection JSUnresolvedReference
     if (this.subscriptions.length === 0) { // connect is called after onReconnect - do not re-add subscriptions
       let o = this.config_org;
+      this.subscribe(`${this.id}/#`, 0, this.messageReceived.bind(this));
       for (let [pid, p] of Object.entries(o.projects)) {
         this.watchProject(pid, p);
-        this.recursivelySubscribe(pid, p);
+        // Subscribe to everything on this organization - probably quicker than throwing stuff away
       }
     }
   }
-  recursivelySubscribe(subPathSoFar, o) { // subPathSoFar excludes starting "org"  note
-    if (o.topics) {
-      for (let topicid of Object.keys(o.topics)) {
-        let topicSubPath = subPathSoFar + "/" + topicid;
-        let duplicates = findMostGranular(this.config_org, topicSubPath, "duplicates");
-        let type = findMostGranular(this.config_org, topicSubPath, "type");
-        this.subscribe(`${this.id}/${topicSubPath}`, 0, duplicates, type, this.messageReceived.bind(this));
-      }
-    }
-    for (let z of [o.sub, o.nodes]) {
-      if (z) {
-        for (let [subid, s] of Object.entries(z)) {
-          this.recursivelySubscribe(subPathSoFar + "/" + subid, s);
-        }
-      }
-    }
-  }
-
   resubscribe() {
     for (let sub of this.subscriptions) {
       this.mqtt_subscribe(sub.topic, sub.qos);
@@ -234,18 +227,82 @@ class MqttOrganization {
   dispatch(topic, message) {
     this.subscriptions.filter(s => s.matches(topic)).forEach(s => s.dispatch(topic, message));
   }
-  // Called by s.dispatch, currently all the same
-  messageReceived(date, topic, message) {
-      this.log(date, topic, message);
+
+  schemaField(module, leaf, field) {
+    let moduleSchema = this.config_schema.modules[module];
+    let moduleTopicSchema = moduleSchema && moduleSchema.topics.find(t => (t.leaf === leaf));
+    let topicLeaf = (moduleTopicSchema && moduleTopicSchema["leaf_from"]) || leaf; // Always exists - at worst, if no module, its leaf directly to topics
+    let topicSchema = this.config_schema.topics[topicLeaf];
+    // Check for override in the module schema, otherwise from topic schema
+    return ((moduleTopicSchema && moduleTopicSchema[field]) || (topicSchema && topicSchema[field])); // could be undefined
+  }
+  // Search various places in priority order to get value for a field -
+  // This allows organizations to override modules override topics override default
+  findMostGranular(topicPathArray, field, def) { // topicPathArray = [ project, node, module, leaf ]
+    return findMostGranular(this.config_org, topicPathArray, field)
+      || this.schemaField(topicPathArray[2], topicPathArray[3], field)
+      || def;
+  }
+  // Check if should log this message
+  shouldLog(date, topicPath, message) { // note message is string at this point
+    // Discard messages too deep (or "set")
+    let typesToLog = [ "float", "int", "bool" ]; // By default log these types
+    let topicPathArray = topicPath.split('/');  // [ org, project, node, [ set ], module, leaf, [ parm ]
+    // We are inside the organization so already handled first field
+    topicPathArray.shift(); // [ project, node, [ set ], module, leaf, [ parm ]
+    if (topicPathArray.length <4) {
+      //console.log("XXX rejecting message with too few", topicPath);
+      return false;
+    } // Not logging parms
+    if (topicPathArray[2] === "set") {
+      //console.log("XXX rejecting set in", topicPath);
+      return false;
+    } // If change this, will need to snip the "set" out the array
+    if (legacymodules.includes(topicPathArray[2]) || legacytopics.includes(topicPathArray[3])) {
+      //console.log("XXX rejecting legacy in", topicPath);
+      return false;
+    }
+    if (topicPathArray.length > 4) {
+      //console.log("XXX rejecting message with parameters", topicPath);
+      return false;
+    } // Not logging parms
+    // Find most granular type
+    let type = this.findMostGranular(topicPathArray, "type", undefined);
+    let value = valueFromText(message, type);
+    this.currentValue[topicPath] = value;
+    // Find most granular rw
+    let rw = this.findMostGranular(topicPathArray, "rw");
+    // Find most granular log - but generic type-specific rule if not found
+    let log = this.findMostGranular(topicPathArray, "log", (typesToLog.includes(type) && rw === "r"));
+    if (!log) {
+      //console.log("XXX rejecting topic flagged !log", topicPath);
+      return false;
+    }
+    // Get the duplicate rules
+    let duplicates = this.findMostGranular(topicPathArray, "duplicates", undefined);
+    if (isDuplicate(date, topicPath, value, duplicates, this.lastDate[topicPath], this.lastValue[topicPath])) {
+      //console.log("XXX rejecting duplicate", topicPath, message);
+      return false;
+    }
+    this.lastValue[topicPath] = value;
+    this.lastDate[topicPath] = date;
+    return true;
+  }
+
+  // Setup by configSubscribe
+  messageReceived(date, topicPath, message) {
+    if (this.shouldLog(date, topicPath, message)) {
+      this.log(date, topicPath, message);
+    }
       // Send to all Firebase instances if configured - Google sheets doesnt do anything at the per-message level
+      // TODO-8 this should really be a generic forwarder function, that does nothing for Gsheets
       if (this.firebases.length > 0) {
-        // Find the subscription to get the parsed value (already converted to correct type)
-        let s = this.subscriptions.find(s => s.matches(topic));
-        let value = s ? s.currentvalue[topic] : message;
+        // Find the current value, already converted and saved above
+        let value = this.currentValue[topicPath] || message;
         // Pass only value (not message) - message is raw string, value is parsed/typed
         // Filtering by allowedNodes happens inside writeData for each instance
         for (let fb of this.firebases) {
-          fb.handleMessage(date, topic, value);
+          fb.handleMessage(date, topicPath, value);
         }
       }
   }
@@ -277,10 +334,9 @@ class MqttOrganization {
       }
     }
   }
-  // Starting with a topic return the current value of the topic - for periodic forwarders.
+  // Starting with a topic return the current value of the topic - for periodic forwarders.\
   findLastValue(topic) {
-    let s = this.subscriptions.find(s => s.matches(topic));
-    return s && s.currentvalue[topic];
+    return this.currentValue[topic];
   }
 
   // Initialize Firebase integration if configured in the organization's YAML config
@@ -600,6 +656,7 @@ class MqttLogger {
   }
   // This is a generic config reader that reads a config.yaml and a config.d directory
   // It could be put in its own module
+
   readConfigFromYamlFile(inputFilePath, cb) {
     console.log("readYamlConfigFile", inputFilePath);
     async.waterfall([
@@ -641,6 +698,7 @@ class MqttLogger {
       },
     ], (err) => cb(err, config_d));
   }
+  // Call cb(null, config object tree) or cb(err)
   readYamlConfig(inputDirPath, cb) {
     async.waterfall([
       (cb1a) => this.readConfigFromYamlFile(`${inputDirPath}/config.yaml`, cb1a),
@@ -663,17 +721,19 @@ class MqttLogger {
       if (err) {
         cb(err);
       } else {
-        this.config = config;
+        this.config = config; // Note this keeps a (shared) pointer to the config for the Logger object, even if this was called from server
         cb(null, config);
       }
     });
   }
 
+  // End of generic yaml config reader
+
   // Start the logger, iterating over config.organizations and starting an MQTT client for each
   start() {
     // noinspection JSUnresolvedReference
     for (let [oid, oconfig] of Object.entries(this.config.organizations)) {
-      let c = new MqttOrganization(oid, oconfig, this.config.mqtt); // Will subscribe when connects
+      let c = new MqttOrganization(oid, oconfig, this.config.mqtt, this.config.schema); // Will subscribe when connects
       this.clients[oid] = c;
       c.startClient();
     }

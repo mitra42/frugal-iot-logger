@@ -1,0 +1,348 @@
+# This file defines the schema for the modules, and topics within them
+# See https://github.com/mitra42/frugal-iot-logger/issues/8
+# This will replace much of what is inside the organizations directory
+#
+# Define topics as shown in the UX or used for logging
+#
+# Each topics has
+# leaf: the name as defined in the code, this is what will be used for MQTT topics
+# name  Capitalized English (and add translation below in 'languages')
+# max   For gauges, slider
+# min   For gauges, slider
+# color can be a name or a #RRGGBB
+# display One of bar,gauge,text,slider,inputbox
+# slot  if this topic fits into a specific slot in the enclosing module (currently just frugal_iot module)
+# type One of bool,float,int,topic,text,yaml
+# rw  r for outputs w for inputs
+# graphable  true if can be displayed on a graph
+# wireable true,false, generally only  controls are wireable
+# wired not valid in this context, it will come from MQTT broker
+# Note battery gets special cased
+
+analog:
+  leaf:     analog
+  type:     int
+  display:  bar
+  rw:       r
+  graphable:  true
+  log:      true
+aqi:
+  leaf:     aqi
+  name:     AQI
+  type:     int
+  display:  bar
+  min:      0
+  max:      5
+  color:    purple
+  rw:       r
+  graphable:  true
+  log:      true
+  duplicates:
+    significantdate: 900000
+    significantvalue: 1
+aqi500:
+  leaf:     aqi500
+  name:     AQI500
+  type:     int
+  display:  bar
+  min:      0
+  max:      500
+  color:    brown
+  rw:       r
+  graphable:  true
+  log:      true
+  duplicates:
+    significantdate: 900000
+    significantvalue: 10
+battery:
+  leaf:     battery
+  name:     Voltage
+  type:     int
+  display:  text
+  min:      3000
+  max:      5000
+  color:    green
+  rw:       r
+  graphable:  true
+  log:      true
+  duplicates:
+    significantdate: 900000
+    significantvalue: 50
+brightness:
+  leaf:     brightness
+  name:     Brightness
+  type:     int
+  max:      255
+  min:      0
+  display:  slider
+  rw:       w
+button:
+  leaf:     button
+  name:     Button
+  type:     bool
+  display:  toggle
+  rw:       r
+color:
+  leaf:     color
+  name:     Color
+  type:     color
+  display:  color
+  rw:       w
+controlfloat:
+  #[leaf, name] should be overridden
+  min:      0
+  max:      100
+  type:     float
+  display:  text
+  color:    black
+  wireable: true
+  rw:       w
+  retain:   true
+controltext:
+  #[leaf, name] should be overridden
+  min:      0
+  max:      100
+  type:     text
+  display:  text
+  color:    black
+  wireable: true
+  rw:       w
+  retain:   true
+controlintoggle:
+  #[leaf, name] should be overridden
+  type:     bool
+  display:  toggle
+  color:    black
+  rw:       w
+  wireable: false
+controlouttoggle:
+  #[leaf, name] should be overridden
+  type:     bool
+  display:  toggle
+  color:    black
+  rw:       r
+  wireable: true
+description:
+  leaf:     description
+  slot:     description
+  name:     Description
+  type:     text
+  display:  text
+  rw:       w
+  retain:   true
+eco2:
+  leaf:     eco2
+  name:     eCO2
+  type:     int
+  display:  bar
+  min:      300
+  max:      900
+  color:    brown
+  log:      true
+  duplicates:
+    significantdate: 900000
+    significantvalue: 5
+  rw:       r
+  graphable:  true
+humidity:
+  leaf:     humidity
+  name:     Humidity
+  type:     float
+  display:  bar
+  min:      0
+  max:      100
+  color:    blue
+  log:      true
+  duplicates:
+    significantdate: 900000
+    significantvalue: 1
+  rw:       r
+  graphable:  true
+id:
+  leaf:     id
+  slot:     id
+  name:     Node ID
+  type:     text
+  display:  text
+  rw:       r
+key:
+  leaf:     key
+  name:     Key
+  type:     text
+  display:  text
+  rw:       r
+lastseen:
+  leaf:     lastseen
+  slot:     lastseen
+  name:     Last Seen
+  type:     text
+  display:  text
+  rw:       r
+loadcell:
+  leaf:     loadcell
+  name:     Load Cell
+  type:     float
+  display:  text
+  min:      0
+  max:      65000
+  color:    yellow
+  log:      true
+  duplicates:
+    significantdate: 900000
+    significantvalue: 100
+  rw:       r
+  calibrate:  true
+  graphable:  true
+lux:
+  leaf:     lux
+  name:     Lux
+  type:     exponential
+  display:  bar
+  min:      0
+  max:      65000
+  color:    yellow
+  log:      true
+  rw:       r
+  duplicates:
+    significantdate: 900000
+    significantvalue: 100
+  graphable:  true
+manual:
+  leaf:     manual
+  name:     Manual
+  type:     bool
+  display:  toggle
+  color:    black
+  rw:       w
+  log:      true
+  graphable:  true
+  duplicates:
+    significantdate: 900000
+    significantvalue: 1
+name:
+  leaf:     name
+  slot:     name
+  name:     Node Name
+  type:     text
+  display:  text
+  rw:       w
+  retain:   true
+on:
+  leaf:     on
+  name:     On
+  type:     bool
+  display:  toggle
+  color:    black
+  rw:       w
+  log:      true
+  duplicates:
+    significantdate: 900000
+    significantvalue: 1
+  graphable:  true
+out:
+  leaf:     out
+  name:     Out
+  type:     bool
+  display:  toggle
+  color:    black
+  rw:       r
+  log:      true
+  wireable: true
+  graphable:  true
+  duplicates:
+    significantdate: 900000
+    significantvalue: 1
+pressure:
+  leaf:     pressure
+  name:     Pressure
+  type:     float
+  display:  bar
+  min:      0
+  max:      99
+  color:    blue
+  rw:       r
+  log:      true
+  duplicates:
+    significantdate: 900000
+    significantvalue: 1
+  graphable:  true
+soil:
+  leaf:     soil
+  name:     Soil Moisture
+  type:     int
+  display:  bar
+  min:      0
+  max:      100
+  color:    brown
+  rw:       r
+  log:      true
+  duplicates:
+    significantdate: 900000
+    significantvalue: 1
+  graphable:  true
+  calibrate:  true
+temperature:
+  leaf:     temperature
+  name:     Temperature
+  type:     float
+  display:  bar
+  rw:       r
+  min:      0
+  max:      50
+  color:    red
+  wireable: false
+  log:      true
+  duplicates:
+    significantdate: 900000
+    significantvalue: 0.1
+  graphable:  true
+timeoff:
+  leaf:     timeoff
+  name:     Time Off (s)
+  min:      0
+  max:      3600
+  type:     float
+  display:  text
+  color:    black
+  rw:       w
+  wireable: true
+timeon:
+  leaf:     timeon
+  name:     Time On (s)
+  min:      0
+  max:      3600
+  type:     float
+  display:  text
+  color:    black
+  rw:       w
+  wireable: true
+tvoc:
+  leaf:     tvoc
+  name:     TVOC
+  type:     int
+  display:  bar
+  min:      0
+  max:      99
+  color:    green
+  rw:       r
+  log:      true
+  duplicates:
+    significantdate: 900000
+    significantvalue: 1
+  graphable:  true
+wifibars:
+  leaf:     wifibars
+  name:     WiFi
+  type:     int
+  display:  text
+  min:      0
+  max:      4
+  color:    blue
+  rw:       r
+wifissid:
+  leaf:     wifissid
+  name:     SSID
+  type:     text
+  display:  text
+  color:    blue
+  rw:       r
