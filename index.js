@@ -19,13 +19,24 @@ import admin from 'firebase-admin'; // Firebase Admin SDK
 // Still there as of 2026-02-24
 // Note - not being in this list should not be a problem - it will be ignored since type not found
 const legacytopics = ["wifistrength", "state", "co2", "auto", "reboot", "temp_setpoint", "temp_hysteresis", "temp_out"];
-const legacymodules = ["blinken_out"];
+const legacymodules = ["blinken_out","messages", "now"];
 
 // =========== Some generic helper functions, not specific to this client ========
 // Clean any leading "/" or "../" from a string so it can be safely appended to a path
 function sanitizeUrl(t) {
   if(t && t[0] === '/') { return sanitizeUrl(t.substring(1)); }
   return (t.replaceAll("../",""));
+}
+// A place to put a breakpoint
+function XXX(args) {
+  if (args) {
+    if (typeof(args) === 'string') {
+      console.log(args);
+    } else {
+      console.log(...args);
+    }
+  }
+  return false;
 }
 
 // TODO-8 rework this,
@@ -83,7 +94,8 @@ function valueFromText(message, type) {
       // noinspection JSUnusedGlobalSymbols
       return yaml.load(message, {onWarning: (warn) => console.log('Yaml warning:', warn)});
     default:
-      console.error(`Unrecognized message type: ${type}`);
+      XXX(`Unrecognized message type: ${type}`);
+      return undefined;
   }
 }
 // Class with one object per subscription including de-duplication rules.
