@@ -746,7 +746,150 @@ class MqttLogger {
     });
   }
 
-  // End of generic yaml config reader
+   // End of generic yaml config reader
+
+  /**
+   * Get device schema from recently seen MQTT topics
+   * Generates schema based on modules/fields that have been observed
+   * @param {string} org - Organization ID
+   * @param {string} project - Project ID
+   * @param {string} deviceId - Device ID (e.g., "esp32-123456")
+   * @returns {Object|null} Device schema in Annex A format, or null if device not found
+   */
+  getDeviceSchema(org, project, deviceId) {
+    try {
+      const orgClient = this.clients[org];
+      if (!orgClient) return null;
+
+      const projectClient = orgClient.projects[project];
+      if (!projectClient) return null;
+
+      const nodeClient = projectClient.nodes[deviceId];
+      if (!nodeClient) return null;
+
+      // Build schema from observed topics
+      const schema = {
+        'device-platform-device-id': `${org}/${project}/${deviceId}`,
+        'farm-platform-device-id': null,
+        modules: {}
+      };
+
+      // Extract modules and fields from nodeClient.topics
+      if (nodeClient.topics) {
+        Object.entries(nodeClient.topics).forEach(([moduleName, fields]) => {
+          if (moduleName !== 'discovery') { // Skip discovery topics
+            const moduleSchema = {
+              name: moduleName,
+              fields: []
+            };
+
+            Object.entries(fields).forEach(([fieldName, fieldData]) => {
+              const fieldSchema = {
+                field: fieldName,
+                name: fieldName,
+                type: fieldData.type || 'float',
+                rw: fieldData.rw || 'r'
+              };
+
+              // Add units if available
+              if (fieldData.units) {
+                fieldSchema.units = fieldData.units;
+              }
+
+              // Add min/max if available
+              if (fieldData.min !== undefined) {
+                fieldSchema.min = fieldData.min;
+              }
+              if (fieldData.max !== undefined) {
+                fieldSchema.max = fieldData.max;
+              }
+
+              moduleSchema.fields.push(fieldSchema);
+            });
+
+            schema.modules[moduleName] = moduleSchema;
+          }
+        });
+      }
+
+      return schema;
+    } catch (err) {
+      console.error(`Error getting schema for ${org}/${project}/${deviceId}:`, err);
+      return null;
+    }
+  }
+
+  /**
+   * Send command to device via MQTT
+   * Publishes command to device control topic
+   * @param {string} org - Organization ID
+   * @param {string} project - Project ID
+   * @param {string} deviceId - Device ID
+   * @param {string} command - Command in "module/field" format
+   * @param {*} value - Command value (number, boolean, string, etc.)
+   * @returns {Promise<{status: string, message: string}>} Result of command send
+   */
+  async sendCommand(org, project, deviceId, command, value) {
+    return new Promise((resolve) => {
+      try {
+        // Validate inputs
+        if (!command || !command.includes('/')) {
+          resolve({
+            status: 'error',
+            message: 'Command must be in module/field format'
+          });
+          return;
+        }
+
+        const [module, field] = command.split('/');
+
+        // Get organization client
+        const orgClient = this.clients[org];
+        if (!orgClient || !orgClient.mqttClient) {
+          resolve({
+            status: 'error',
+            message: 'Organization not connected to MQTT'
+          });
+          return;
+        }
+
+        const mqttClient = orgClient.mqttClient;
+
+        // Check if MQTT client is connected
+        if (!mqttClient.connected) {
+          resolve({
+            status: 'error',
+            message: 'MQTT broker not connected'
+          });
+          return;
+        }
+
+        // Build MQTT topic for control
+        const topic = `${org}/${project}/${deviceId}/${module}/set/${field}`;
+        const message = String(value);
+
+        // Publish command
+        mqttClient.publish(topic, message, { retain: false }, (err) => {
+          if (err) {
+            resolve({
+              status: 'error',
+              message: `Failed to publish: ${err.message}`
+            });
+          } else {
+            resolve({
+              status: 'sent',
+              message: `Command sent to device: ${command} = ${value}`
+            });
+          }
+        });
+      } catch (err) {
+        resolve({
+          status: 'error',
+          message: `Exception: ${err.message}`
+        });
+      }
+    });
+  }
 
   // Start the logger, iterating over config.organizations and starting an MQTT client for each
   start() {
