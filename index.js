@@ -242,14 +242,124 @@ class MqttOrganization {
     this.subscriptions.filter(s => s.matches(topic)).forEach(s => s.dispatch(topic, message));
   }
 
-  schemaField(module, leaf, field) {
-    let moduleSchema = this.config_schema.modules[module];
-    let moduleTopicSchema = moduleSchema && moduleSchema.topics.find(t => (t.leaf === leaf));
-    let topicLeaf = (moduleTopicSchema && moduleTopicSchema["leaf_from"]) || leaf; // Always exists - at worst, if no module, its leaf directly to topics
-    let topicSchema = this.config_schema.topics[topicLeaf];
-    // Check for override in the module schema, otherwise from topic schema
-    return ((moduleTopicSchema && moduleTopicSchema[field]) || (topicSchema && topicSchema[field])); // could be undefined
-  }
+   schemaField(module, leaf, field) {
+     let moduleSchema = this.config_schema.modules[module];
+     let moduleTopicSchema = moduleSchema && moduleSchema.topics.find(t => (t.leaf === leaf));
+     let topicLeaf = (moduleTopicSchema && moduleTopicSchema["leaf_from"]) || leaf; // Always exists - at worst, if no module, its leaf directly to topics
+     let topicSchema = this.config_schema.topics[topicLeaf];
+     // Check for override in the module schema, otherwise from topic schema
+     return ((moduleTopicSchema && moduleTopicSchema[field]) || (topicSchema && topicSchema[field])); // could be undefined
+   }
+
+   /**
+    * Get schema for a module by expanding all its topics
+    * Uses leaf_from to fetch from topics schema, overriding with local values
+    * @param {string} module - Module name
+    * @returns {Object} Schema for the module with fields array
+    */
+   schemaModule(module) {
+     const moduleSchema = {
+       name: module,
+       fields: []
+     };
+
+     const moduleConfig = this.config_schema.modules[module];
+     if (!moduleConfig || !moduleConfig.topics) {
+       return moduleSchema; // Empty module if not defined
+     }
+
+     // Iterate through topics defined for this module
+     moduleConfig.topics.forEach(topicDef => {
+       const leaf = topicDef.leaf;
+       const topicLeaf = topicDef.leaf_from || leaf; // Use leaf_from if defined, otherwise use leaf
+       const topicSchema = this.config_schema.topics[topicLeaf];
+
+       // Build field schema
+       const fieldSchema = {
+         field: leaf,
+         name: topicDef.name || leaf,
+         type: topicDef.type || (topicSchema && topicSchema.type) || 'float',
+         rw: topicDef.rw || (topicSchema && topicSchema.rw) || 'r'
+       };
+
+       // Add optional properties if defined
+       if (topicDef.units || (topicSchema && topicSchema.units)) {
+         fieldSchema.units = topicDef.units || topicSchema.units;
+       }
+       if (topicDef.min !== undefined) {
+         fieldSchema.min = topicDef.min;
+       } else if (topicSchema && topicSchema.min !== undefined) {
+         fieldSchema.min = topicSchema.min;
+       }
+       if (topicDef.max !== undefined) {
+         fieldSchema.max = topicDef.max;
+       } else if (topicSchema && topicSchema.max !== undefined) {
+         fieldSchema.max = topicSchema.max;
+       }
+
+       moduleSchema.fields.push(fieldSchema);
+     });
+
+     return moduleSchema;
+   }
+
+   /**
+    * Get list of modules for a specific node
+    * Filters currentValue to find all modules that have been observed for this node
+    * @param {string} nodeName - Node ID
+    * @returns {Array<string>} Array of module names observed for this node
+    */
+   modulesNode(nodeName) {
+     const modules = new Set();
+
+     // Iterate through all currentValue entries
+     Object.keys(this.currentValue).forEach(topicPath => {
+       // Topic path format: project/node/module/leaf or project/node/set/module/leaf
+       const parts = topicPath.split('/');
+
+       // Find the node in the path and get the module
+       const nodeIndex = parts.indexOf(nodeName);
+       if (nodeIndex !== -1 && nodeIndex < parts.length - 2) {
+         // Check if next part is "set" (legacy) or a module
+         let moduleIndex = nodeIndex + 1;
+         if (parts[moduleIndex] === 'set') {
+           moduleIndex++;
+         }
+
+         if (moduleIndex < parts.length) {
+           const module = parts[moduleIndex];
+           // Only add if it's a valid module (not a numeric index or parameter)
+           if (module && !module.match(/^\d+$/)) {
+             modules.add(module);
+           }
+         }
+       }
+     });
+
+     return Array.from(modules).sort();
+   }
+
+   /**
+    * Get complete schema for a node
+    * Uses modulesNode to get list of modules, then schemaModule to expand each
+    * @param {string} nodeName - Node ID
+    * @returns {Object} Complete node schema with all modules and fields
+    */
+   schemaNode(nodeName) {
+     const schema = {
+       modules: {}
+     };
+
+     // Get all modules for this node
+     const modules = this.modulesNode(nodeName);
+
+     // Build schema for each module
+     modules.forEach(module => {
+       schema.modules[module] = this.schemaModule(module);
+     });
+
+     return schema;
+   }
   // Search various places in priority order to get value for a field -
   // This allows organizations to override modules override topics override default
   findMostGranular(topicPathArray, field, def) { // topicPathArray = [ project, node, module, leaf ]
@@ -749,70 +859,39 @@ class MqttLogger {
    // End of generic yaml config reader
 
   /**
-   * Get device schema from recently seen MQTT topics
-   * Generates schema based on modules/fields that have been observed
+   * Get device schema from logger
+   * Generates schema based on modules/fields that have been observed for the node
    * @param {string} org - Organization ID
    * @param {string} project - Project ID
-   * @param {string} deviceId - Device ID (e.g., "esp32-123456")
+   * @param {string} deviceId - Device ID (node name, e.g., "esp32-123456")
    * @returns {Object|null} Device schema in Annex A format, or null if device not found
    */
   getDeviceSchema(org, project, deviceId) {
     try {
+      // Get the organization client
       const orgClient = this.clients[org];
-      if (!orgClient) return null;
-
-      const projectClient = orgClient.projects[project];
-      if (!projectClient) return null;
-
-      const nodeClient = projectClient.nodes[deviceId];
-      if (!nodeClient) return null;
-
-      // Build schema from observed topics
-      const schema = {
-        'device-platform-device-id': `${org}/${project}/${deviceId}`,
-        'farm-platform-device-id': null,
-        modules: {}
-      };
-
-      // Extract modules and fields from nodeClient.topics
-      if (nodeClient.topics) {
-        Object.entries(nodeClient.topics).forEach(([moduleName, fields]) => {
-          if (moduleName !== 'discovery') { // Skip discovery topics
-            const moduleSchema = {
-              name: moduleName,
-              fields: []
-            };
-
-            Object.entries(fields).forEach(([fieldName, fieldData]) => {
-              const fieldSchema = {
-                field: fieldName,
-                name: fieldName,
-                type: fieldData.type || 'float',
-                rw: fieldData.rw || 'r'
-              };
-
-              // Add units if available
-              if (fieldData.units) {
-                fieldSchema.units = fieldData.units;
-              }
-
-              // Add min/max if available
-              if (fieldData.min !== undefined) {
-                fieldSchema.min = fieldData.min;
-              }
-              if (fieldData.max !== undefined) {
-                fieldSchema.max = fieldData.max;
-              }
-
-              moduleSchema.fields.push(fieldSchema);
-            });
-
-            schema.modules[moduleName] = moduleSchema;
-          }
-        });
+      if (!orgClient) {
+        console.warn(`Organization ${org} not found`);
+        return null;
       }
 
-      return schema;
+      // Get the node schema from the organization
+      const nodeSchema = orgClient.schemaNode(deviceId);
+
+      // Check if node has any modules
+      if (!nodeSchema.modules || Object.keys(nodeSchema.modules).length === 0) {
+        console.warn(`No schema found for node ${deviceId} in ${org}/${project}`);
+        return null;
+      }
+
+      // Build the full device schema per Annex A format
+      const deviceSchema = {
+        'device-platform-device-id': `${org}/${project}/${deviceId}`,
+        'farm-platform-device-id': null,
+        modules: nodeSchema.modules
+      };
+
+      return deviceSchema;
     } catch (err) {
       console.error(`Error getting schema for ${org}/${project}/${deviceId}:`, err);
       return null;
