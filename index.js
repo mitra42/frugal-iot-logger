@@ -288,6 +288,7 @@ class MqttOrganization {
     // Find most granular type
     let type = this.findMostGranular(topicPathArray, "type", undefined);
     let value = valueFromText(message, type);
+    // Save the current value whether logging or not
     this.currentValue[topicPath] = value;
     // Find most granular rw
     let rw = this.findMostGranular(topicPathArray, "rw");
@@ -373,6 +374,30 @@ class MqttOrganization {
         }
       }
     }
+  }
+  // Linear time remap of values to avoid n^2 search for reportNodes
+  reportNodes() {
+    let res = {};
+    let reportLeafs = [
+      "frugal_iot/description",
+      "frugal_iot/name",
+      "ota/key",
+    ];
+    Object.entries(this.currentValue).forEach(([key, value]) => {
+      let [ orgid, projectid, nodeid, moduleid, leaf, rest ] = key.split('/');
+      let ml;
+      if (!rest && reportLeafs.includes(ml = `${moduleid}/${leaf}`)) {
+        let p = (res[projectid] || (res[projectid] = {}));
+        let n = (p[nodeid] || (p[nodeid] = {}));
+        n[ml] = value;
+      }
+    });
+    Object.entries(this.projects).forEach(([projectid, proj]) => {
+      Object.entries(proj).forEach(([nodeid, lastseen]) => {
+        res[projectid][nodeid]['lastseen'] = lastseen;
+      });
+    });
+    return res;
   }
 }  // MqttOrganization
 
@@ -664,14 +689,25 @@ class MqttLogger {
     this.clients = {};
   }
 
+
   // reportNodes is used by the frugal-iot-server to report the last seen date of each node
   // noinspection JSUnusedGlobalSymbols
-  reportNodes() {  // { org: { project: { node: date }}}
+  /*
+  OBSreportNodes() {  // { org: { project: { node: date }}}
     let report = {};
     Object.entries(this.clients).forEach(([k,v]) => { // Loop over organizations
       report[k] = v.projects;
     });
     return report;
+  }
+  */
+  reportNodes() {
+    //TODO-58 filter by user having access
+    let res = {};
+    Object.entries(this.clients).forEach(([orgId,org]) => { // Loop over organizations
+      res[orgId] = org.reportNodes();
+    });
+    return res;
   }
   // This is a generic config reader that reads a config.yaml and a config.d directory
   // It could be put in its own module
