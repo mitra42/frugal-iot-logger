@@ -274,7 +274,7 @@ class MqttOrganization {
        const topicLeaf = topicDef.leaf_from || leaf; // Use leaf_from if defined, otherwise use leaf
        const topicSchema = this.config_schema.topics[topicLeaf];
 
-       // Build field schema
+       // Build field schema starting with basic required fields
        const fieldSchema = {
          field: leaf,
          name: topicDef.name || leaf,
@@ -295,6 +295,23 @@ class MqttOrganization {
          fieldSchema.max = topicDef.max;
        } else if (topicSchema && topicSchema.max !== undefined) {
          fieldSchema.max = topicSchema.max;
+       }
+
+       // Preserve any additional Frugal IoT specific properties from topicDef
+       // This includes custom fields like color, slot, etc.
+       Object.entries(topicDef).forEach(([key, value]) => {
+         if (!['leaf', 'name', 'type', 'rw', 'units', 'min', 'max', 'leaf_from'].includes(key)) {
+           fieldSchema[key] = value;
+         }
+       });
+
+       // Also preserve additional properties from topicSchema if not already in topicDef
+       if (topicSchema) {
+         Object.entries(topicSchema).forEach(([key, value]) => {
+           if (!fieldSchema.hasOwnProperty(key) && !['type', 'rw', 'units', 'min', 'max'].includes(key)) {
+             fieldSchema[key] = value;
+           }
+         });
        }
 
        moduleSchema.fields.push(fieldSchema);
@@ -894,69 +911,256 @@ class MqttLogger {
 
    // End of generic yaml config reader
 
-  /**
-   * Get device schema from logger
-   * Generates schema based on modules/fields that have been observed for the node
-   * @param {string} org - Organization ID
-   * @param {string} project - Project ID
-   * @param {string} deviceId - Device ID (node name, e.g., "esp32-123456")
-   * @returns {Object|null} Device schema in Annex A format, or null if device not found
-   */
-  getDeviceSchema(org, project, deviceId) {
-    try {
-      // Get the organization client
-      const orgClient = this.clients[org];
-      if (!orgClient) {
-        console.warn(`Organization ${org} not found`);
-        return null;
-      }
+   /**
+    * Map frugal-iot types to W3C WoT types
+    * According to WoT Thing Description spec 5.3.2.1
+    * @param {string} frugalType - Type from frugal-iot schema
+    * @returns {string} WoT type
+    */
+   mapTypeToWoT(frugalType) {
+     const typeMap = {
+       'bool': 'boolean',
+       'int': 'integer',
+       'float': 'number',
+       'text': 'string',
+       'topic': 'string',
+       'color': 'string',
+       'yaml': 'object'
+     };
+     return typeMap[frugalType] || 'string';
+   }
 
-      // Get the node schema from the organization
-      const nodeSchema = orgClient.schemaNode(deviceId);
-
-      // Check if node has any modules
-      if (!nodeSchema.modules || Object.keys(nodeSchema.modules).length === 0) {
-        console.warn(`No schema found for node ${deviceId} in ${org}/${project}`);
-        return null;
-      }
-
-      // Build the full device schema per Annex A format
-      const deviceSchema = {
-        'device-platform-device-id': `${org}/${project}/${deviceId}`,
-        'farm-platform-device-id': null,
-        modules: nodeSchema.modules
+    /**
+     * Build a schema field object according to WoT specification 5.3.1.1
+     * Preserves Frugal IoT specific metadata in a frugal-iot namespace
+     * @param {Object} fieldSchema - Field schema from our module
+     * @param {string} moduleName - Name of the module
+     * @param {boolean} isWritable - Whether this is a writable field
+     * @returns {Object} WoT schema object with WoT standard fields and frugal-iot extensions
+     */
+    buildWoTSchemaObject(fieldSchema, moduleName, isWritable) {
+      const schemaObj = {
+        type: this.mapTypeToWoT(fieldSchema.type),
+        title: fieldSchema.name || fieldSchema.field,
+        description: fieldSchema.name || fieldSchema.field
       };
 
-      return deviceSchema;
-    } catch (err) {
-      console.error(`Error getting schema for ${org}/${project}/${deviceId}:`, err);
-      return null;
+      // Add units if present
+      if (fieldSchema.units) {
+        schemaObj.unit = fieldSchema.units;
+      }
+
+      // Add numeric constraints
+      if (fieldSchema.min !== undefined) {
+        schemaObj.minimum = fieldSchema.min;
+      }
+      if (fieldSchema.max !== undefined) {
+        schemaObj.maximum = fieldSchema.max;
+      }
+
+      // Mark as readOnly or writeOnly based on field type
+      if (fieldSchema.rw === 'r' || (!fieldSchema.rw && !isWritable)) {
+        schemaObj.readOnly = true;
+      } else if (fieldSchema.rw === 'w' || isWritable) {
+        schemaObj.writeOnly = true;
+      }
+      // If 'rw', it's readable and writable - no flags set
+
+      // Preserve Frugal IoT specific metadata under frugal-iot namespace
+      // This includes fields like color, slot, and any other custom properties
+      const frugalFields = {};
+      const standardWoTFields = ['type', 'title', 'description', 'unit', 'minimum', 'maximum', 'readOnly', 'writeOnly'];
+
+      Object.entries(fieldSchema).forEach(([key, value]) => {
+        // Skip internal fields and mapped fields
+        if (!['field', 'name', 'units', 'min', 'max', 'rw'].includes(key) && !standardWoTFields.includes(key)) {
+          frugalFields[key] = value;
+        }
+      });
+
+      // Add frugal-iot namespace with original metadata if there are custom fields
+      if (Object.keys(frugalFields).length > 0) {
+        schemaObj['frugal-iot:metadata'] = frugalFields;
+      }
+
+      return schemaObj;
     }
-  }
+
+   /**
+    * Get device schema from logger in W3C Web of Things Thing Descriptor format
+    * According to https://www.w3.org/TR/wot-thing-description11/
+    * @param {string} org - Organization ID
+    * @param {string} project - Project ID
+    * @param {string} deviceId - Device ID (node name, e.g., "esp32-123456")
+    * @param {string} baseURI - Base URI for the server (e.g., "https://frugaliot.naturalinnovation.org")
+    * @returns {Object|null} Device schema in W3C WoT Thing Descriptor format, or null if device not found
+    */
+   getDeviceSchema(org, project, deviceId, baseURI = 'https://frugaliot.naturalinnovation.org') {
+     try {
+       // Get the organization client
+       const orgClient = this.clients[org];
+       if (!orgClient) {
+         console.warn(`Organization ${org} not found`);
+         return null;
+       }
+
+       // Get MQTT broker address from the organization client's config
+       const mqttBroker = orgClient.config_mqtt && orgClient.config_mqtt.broker ? orgClient.config_mqtt.broker : null;
+
+       // Get the node schema from the organization
+       const nodeSchema = orgClient.schemaNode(deviceId);
+
+       // Check if node has any modules
+       if (!nodeSchema.modules || Object.keys(nodeSchema.modules).length === 0) {
+         console.warn(`No schema found for node ${deviceId} in ${org}/${project}`);
+         return null;
+       }
+
+       const deviceId_full = `${org}/${project}/${deviceId}`;
+       const properties = {};
+       const actions = {};
+
+       // Iterate through all modules and their fields to build properties and actions
+       Object.entries(nodeSchema.modules).forEach(([moduleName, moduleSchema]) => {
+         if (moduleSchema.fields) {
+           moduleSchema.fields.forEach(field => {
+             const fieldKey = `${moduleName}/${field.field}`;
+             const schemaObj = this.buildWoTSchemaObject(field, moduleName, false);
+
+             // Determine if this is a property (readable) or action (writable)
+             if (field.rw === 'r' || (field.rw && field.rw.includes('r'))) {
+               // This is readable - add as property
+               properties[fieldKey] = {
+                 ...schemaObj,
+                 forms: [
+                   {
+                     href: `${baseURI}/devices/property?deviceId=${encodeURIComponent(deviceId_full)}&property=${encodeURIComponent(fieldKey)}`,
+                     contentType: 'application/json',
+                     op: ['readproperty']
+                   }
+                 ]
+               };
+
+               // Add MQTT binding if broker is provided
+               if (mqttBroker) {
+                 properties[fieldKey].forms.push({
+                   href: `${mqttBroker}/${deviceId_full}/${moduleName}/${field.field}`,
+                   contentType: 'text/plain',
+                   op: ['readproperty'],
+                   subprotocol: 'mqtt'
+                 });
+               }
+             }
+
+             if (field.rw === 'w' || (field.rw && field.rw.includes('w'))) {
+               // This is writable - add as action
+               const actionObj = {
+                 title: field.name || field.field,
+                 description: field.name || field.field,
+                 input: {
+                   ...schemaObj
+                 },
+                 forms: [
+                   {
+                     href: `${baseURI}/device/action?deviceId=${encodeURIComponent(deviceId_full)}&action=${encodeURIComponent(fieldKey)}`,
+                     contentType: 'application/json',
+                     op: ['invokeaction']
+                   }
+                 ]
+               };
+
+               // Add MQTT binding if broker is provided
+               if (mqttBroker) {
+                 actionObj.forms.push({
+                   href: `${mqttBroker}/${deviceId_full}/set/${moduleName}/${field.field}`,
+                   contentType: 'text/plain',
+                   op: ['invokeaction'],
+                   subprotocol: 'mqtt'
+                 });
+               }
+
+               actions[fieldKey] = actionObj;
+             }
+           });
+         }
+       });
+
+       // Build the Thing Descriptor according to W3C spec
+       const thingDescriptor = {
+         '@context': [
+           'https://www.w3.org/2022/wot/td/v1.1',
+           {
+             'sosa': 'http://www.w3.org/ns/sosa/',
+             'ssn': 'http://www.w3.org/ns/ssn/',
+             'rdf': 'http://www.w3.org/1999/02/22-rdf-syntax-ns#',
+             'rdfs': 'http://www.w3.org/2000/01/rdf-schema#',
+             'frugal-iot': 'https://github.com/mitra42/frugal-iot/ns/'
+           }
+         ],
+         'id': deviceId_full,
+         'title': `Frugal IoT Device - ${deviceId}`,
+         'description': `IoT device ${deviceId} in project ${project}/${org}`,
+         'base': baseURI,
+         'securityDefinitions': {
+           'basic_sc': {
+             'scheme': 'basic',
+             "in": "header"
+           }
+         },
+         'security': ['basic_sc'],
+         "forms": [
+           {
+             "href": `${baseURI}/property?deiceId=${encodeURIComponent(deviceId_full)}`,
+             "op": "readallproperties",
+             "contentType": "application/senml+json"
+           },
+           {
+             "href": mqttBroker,
+             "op": ["observeallproperties","unobserveallproperties"],
+             "mqv:filter": `${deviceId_full}/#`,
+             "contentType": "text/plain"
+           }
+         ],
+         'properties': properties,
+         'actions': actions
+       };
+
+       // Add MQTT protocol binding information if broker is provided
+       if (mqttBroker) {
+         thingDescriptor['mqtt:broker'] = mqttBroker;
+         thingDescriptor['mqtt:clientId'] = `frugal-iot-${org}`;
+       }
+
+       return thingDescriptor;
+     } catch (err) {
+       console.error(`Error getting schema for ${org}/${project}/${deviceId}:`, err);
+       return null;
+     }
+   }
 
   /**
-   * Send command to device via MQTT
-   * Publishes command to device control topic
+   * Send action to device via MQTT
+   * Publishes action to device control topic
    * @param {string} org - Organization ID
    * @param {string} project - Project ID
    * @param {string} deviceId - Device ID
-   * @param {string} command - Command in "module/field" format
-   * @param {*} value - Command value (number, boolean, string, etc.)
-   * @returns {Promise<{status: string, message: string}>} Result of command send
+   * @param {string} action - action in "module/field" format
+   * @param {*} value - action value (number, boolean, string, etc.)
+   * @returns {Promise<{status: string, message: string}>} Result of action send
    */
-  async sendCommand(org, project, deviceId, command, value) {
+  async sendAction(org, project, deviceId, action, value) {
     return new Promise((resolve) => {
       try {
         // Validate inputs
-        if (!command || !command.includes('/')) {
+        if (!action || !action.includes('/')) {
           resolve({
             status: 'error',
-            message: 'Command must be in module/field format'
+            message: 'Action must be in module/field format'
           });
           return;
         }
 
-        const [module, field] = command.split('/');
+        const [module, field] = action.split('/');
 
         // Get organization client
         const orgClient = this.clients[org];
@@ -980,10 +1184,10 @@ class MqttLogger {
         }
 
         // Build MQTT topic for control
-        const topic = `${org}/${project}/${deviceId}/${module}/set/${field}`;
+        const topic = `${org}/${project}/${deviceId}/set/${module}/${field}`;
         const message = String(value);
 
-        // Publish command
+        // Publish action
         mqttClient.publish(topic, message, { retain: false }, (err) => {
           if (err) {
             resolve({
@@ -993,7 +1197,7 @@ class MqttLogger {
           } else {
             resolve({
               status: 'sent',
-              message: `Command sent to device: ${command} = ${value}`
+              message: `Action sent to device: ${action} = ${value}`
             });
           }
         });
