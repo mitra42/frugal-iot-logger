@@ -269,7 +269,7 @@ class MqttOrganization {
       return false;
     } // Not logging parms
 
-    // Can ignore "set" 
+    // Can ignore "set"
     if (topicPathArray[2] === "set") {
       //console.log("XXX rejecting set in", topicPath);
       // LEGACY - see https://github.com/mitra42/frugal-iot-logger/issues/17
