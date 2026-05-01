@@ -398,7 +398,9 @@ class MqttOrganization {
     });
     Object.entries(this.projects).forEach(([projectid, proj]) => {
       Object.entries(proj).forEach(([nodeid, lastseen]) => {
-        res[projectid][nodeid]['lastseen'] = lastseen;
+        let p = (res[projectid] || (res[projectid] = {}));
+        let n = (p[nodeid] || (p[nodeid] = {}));
+        n['lastseen'] = lastseen;
       });
     });
     return res;
