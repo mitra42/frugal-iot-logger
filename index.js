@@ -268,14 +268,16 @@ class MqttOrganization {
       //console.log("XXX rejecting message with too few", topicPath);
       return false;
     } // Not logging parms
+
+    // Can ignore "set" 
     if (topicPathArray[2] === "set") {
       //console.log("XXX rejecting set in", topicPath);
       // LEGACY - see https://github.com/mitra42/frugal-iot-logger/issues/17
       // Remove the "set" from the path so it can match the schema
       // This is a legacy workaround for old devices that publish to "org/project/node/set/module/leaf" and don't echo back "org/project/node/module/leaf"
       // Its particularly needed for relay/on
-      topicPathArray.splice(2,1);
-      //return false;
+      //topicPathArray.splice(2,1);
+      return false;
     } // If change this, will need to snip the "set" out the array
     if (legacymodules.includes(topicPathArray[2]) || legacytopics.includes(topicPathArray[3])) {
       //console.log("XXX rejecting legacy in", topicPath);
@@ -304,6 +306,8 @@ class MqttOrganization {
       //console.log("XXX rejecting duplicate", topicPath, message);
       return false;
     }
+    // Keep a value that can be compared for duplicates.
+    // Note, this is different from cyrrentValue as its the last value logged, not the last value reported.
     this.lastValue[topicPath] = value;
     this.lastDate[topicPath] = date;
     return true;
