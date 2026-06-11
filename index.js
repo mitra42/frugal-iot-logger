@@ -507,6 +507,7 @@ class MqttOrganization {
     }
   }
   // Linear time remap of values to avoid n^2 search for reportNodes
+  // Return a structure { projectid: { nodeid: { moduleid/leaf: value } but just for those fields in reportLeafs and lastseen
   reportNodes() {
     let res = {};
     let reportLeafs = [
