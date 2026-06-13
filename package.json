@@ -8,8 +8,8 @@
   "dependencies": {
     "async": "^3.2.6",
     "firebase-admin": "^12.7.0",
-    "js-yaml": "^4.1.1",
-    "mqtt": "^5.15.0",
+    "js-yaml": "^4.2.0",
+    "mqtt": "^5.15.1",
     "array.prototype.tospliced": "^1.1.5"
   },
   "description": "Frugal IoT logger",
