@@ -16,6 +16,10 @@ button:
   name: Button
   topics:
     - leaf:     button
+captive:
+  name: Captive
+  topics:
+    - leaf:     language_code
 controlblinken:
   name: "Control Blinken"
   topics:
@@ -65,7 +69,7 @@ controlhysteresis:
     - leaf: limit
       leaf_from:  controlfloat
       name: Limit
-    - leaf: hysterisis
+    - leaf: hysteresis
       leaf_from: controlfloat
       name: Hysterisis
       max:  100
@@ -75,27 +79,6 @@ controlhysteresis:
       name: Out
 # Some nodes have misspeeled id for this control
 controlhysterisis:
-  name: Control
-  topics:
-    - leaf: now
-      leaf_from: controlfloat
-      name: Now
-    - leaf: greater
-      leaf_from: controlintoggle
-      name: Greater Than
-    - leaf: limit
-      leaf_from:  controlfloat
-      name: Limit
-    - leaf: hysterisis
-      leaf_from: controlfloat
-      name: Hysterisis
-      max:  100
-      wireable: false
-    - leaf: out
-      leaf_from: controlouttoggle
-      name: Out
-# Some nodes have wrong id for this control
-Control_Hysterisis:
   name: Control
   topics:
     - leaf: now
@@ -141,6 +124,16 @@ frugal_iot:
     - leaf:     name
     - leaf:     description
     - leaf:     lastseen
+gps:
+  name: GPS
+  topics:
+    - leaf:     latitude
+    - leaf:     longitude
+    - leaf:     altitude
+    - leaf:     course
+    - leaf:     speed
+    - leaf:     satellites
+    - leaf:     hdop
 health:
   name: System
   insidefrugaliot: true

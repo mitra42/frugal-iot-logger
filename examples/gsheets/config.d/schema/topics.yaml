@@ -18,7 +18,21 @@
 # wireable true,false, generally only  controls are wireable
 # wired not valid in this context, it will come from MQTT broker
 # Note battery gets special cased
-
+# See https://www.iana.org/assignments/senml/senml.xhtml for units
+altitude:
+  leaf:     altitude
+  name:     Altitude
+  type:     float
+  display:  text
+  min:      -500
+  max:      9000
+  color:    black
+  log:      true
+  duplicates:
+    significantdate: 900000
+    significantvalue: 1
+  rw:       r
+  graphable:  true
 analog:
   leaf:     analog
   type:     int
@@ -65,6 +79,7 @@ battery:
   rw:       r
   graphable:  true
   log:      true
+  units:    mV
   duplicates:
     significantdate: 900000
     significantvalue: 50
@@ -81,6 +96,7 @@ button:
   name:     Button
   type:     bool
   display:  toggle
+  color:    black
   rw:       r
 color:
   leaf:     color
@@ -93,6 +109,16 @@ controlfloat:
   min:      0
   max:      100
   type:     float
+  display:  text
+  color:    black
+  wireable: true
+  rw:       w
+  retain:   true
+controlint:
+  #[leaf, name] should be overridden
+  min:      0
+  max:      65535
+  type:     int
   display:  text
   color:    black
   wireable: true
@@ -122,6 +148,21 @@ controlouttoggle:
   color:    black
   rw:       r
   wireable: true
+course:
+  leaf:     course
+  name:     Course
+  type:     float
+  display:  text
+  min:      0
+  max:      360
+  color:    black
+  log:      true
+  duplicates:
+    significantdate: 900000
+    significantvalue: 1
+  rw:       r
+  graphable:  true
+  units:    deg
 description:
   leaf:     description
   slot:     description
@@ -139,11 +180,26 @@ eco2:
   max:      900
   color:    brown
   log:      true
+  units:    ppm
   duplicates:
     significantdate: 900000
     significantvalue: 5
   rw:       r
   graphable:  true
+hdop:
+  leaf:     hdop
+  name:     HDOP
+  type:     float
+  display:  text
+  min:      0
+  max:      50
+  color:    black
+  log:      false
+  duplicates:
+    significantdate: 900000
+    significantvalue: 0.1
+  rw:       r
+  graphable:  false
 humidity:
   leaf:     humidity
   name:     Humidity
@@ -158,6 +214,7 @@ humidity:
     significantvalue: 1
   rw:       r
   graphable:  true
+  units:    "%RH"
 id:
   leaf:     id
   slot:     id
@@ -171,6 +228,13 @@ key:
   type:     text
   display:  text
   rw:       r
+languagecode:
+  leaf:     languagecode
+  name:     Language
+  type:     text
+  display:  text
+  color:    black
+  rw:       r
 lastseen:
   leaf:     lastseen
   slot:     lastseen
@@ -178,6 +242,21 @@ lastseen:
   type:     text
   display:  text
   rw:       r
+latitude:
+  leaf:     latitude
+  name:     Latitude
+  type:     float
+  display:  text
+  min:      -90
+  max:      +90
+  color:    black
+  log:      true
+  duplicates:
+    significantdate: 900000
+    significantvalue: 0.0001
+  rw:       r
+  graphable:  true
+  units:    lat
 loadcell:
   leaf:     loadcell
   name:     Load Cell
@@ -193,6 +272,21 @@ loadcell:
   rw:       r
   calibrate:  true
   graphable:  true
+longitude:
+  leaf:     longitude
+  name:     Longitude
+  type:     float
+  display:  text
+  min:      -180
+  max:      +180
+  color:    black
+  log:      true
+  duplicates:
+    significantdate: 900000
+    significantvalue: 0.0001
+  rw:       r
+  graphable:  true
+  units:    lon
 lux:
   leaf:     lux
   name:     Lux
@@ -207,18 +301,31 @@ lux:
     significantdate: 900000
     significantvalue: 100
   graphable:  true
+  units:    lx
 manual:
   leaf:     manual
   name:     Manual
   type:     bool
   display:  toggle
   color:    black
-  rw:       w
+  rw:       r
   log:      true
   graphable:  true
   duplicates:
     significantdate: 900000
     significantvalue: 1
+  wireable: true
+message:
+  leaf:     message
+  name:     Message
+  min:      0
+  max:      100
+  type:     text
+  display:  text
+  color:    black
+  wireable: true
+  rw:       w
+  retain:   true
 name:
   leaf:     name
   slot:     name
@@ -266,6 +373,36 @@ pressure:
     significantdate: 900000
     significantvalue: 1
   graphable:  true
+satellites:
+  leaf:     satellites
+  name:     Satellites
+  type:     float
+  display:  text
+  min:      0
+  max:      32
+  color:    black
+  log:      false
+  duplicates:
+    significantdate: 900000
+    significantvalue: 1
+  rw:       r
+  graphable:  false
+  units:    m/s
+speed:
+  leaf:     speed
+  name:     Speed
+  type:     float
+  display:  text
+  min:      0
+  max:      999
+  color:    black
+  log:      true
+  duplicates:
+    significantdate: 900000
+    significantvalue: 1
+  rw:       r
+  graphable:  true
+  units:    m/s
 soil:
   leaf:     soil
   name:     Soil Moisture
@@ -281,6 +418,7 @@ soil:
     significantvalue: 1
   graphable:  true
   calibrate:  true
+  units:    "%RH"
 temperature:
   leaf:     temperature
   name:     Temperature
@@ -292,6 +430,7 @@ temperature:
   color:    red
   wireable: false
   log:      true
+  units:    Cel
   duplicates:
     significantdate: 900000
     significantvalue: 0.1
@@ -306,6 +445,7 @@ timeoff:
   color:    black
   rw:       w
   wireable: true
+  units:    s
 timeon:
   leaf:     timeon
   name:     Time On (s)
@@ -316,6 +456,7 @@ timeon:
   color:    black
   rw:       w
   wireable: true
+  units:    s
 tvoc:
   leaf:     tvoc
   name:     TVOC
@@ -326,6 +467,7 @@ tvoc:
   color:    green
   rw:       r
   log:      true
+  units:    ppb
   duplicates:
     significantdate: 900000
     significantvalue: 1
