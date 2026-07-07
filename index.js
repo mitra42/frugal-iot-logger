@@ -39,29 +39,6 @@ function XXX(args) {
   return false;
 }
 
-// TODO-8 rework this,
-// Currently specific to structure of config.d/organizations/*yaml
-// Allow overrides in config.d/organizations/*yaml but simplify to look like modules or topics
-function findMostGranular(o, topicPathArray, f) {
-  let n = topicPathArray[0]  // current segment may be undefined but shouldn't be
-  if (topicPathArray.length > 1) {
-    let topicRestArray = topicPathArray.toSpliced(0,1); // If this fails, you are running on an old (<20) version of node
-    let oo = o.projects || o.nodes || o.sub // Next step depends on if org, project, node or topic
-    // Recurse on remaining path, note always want the deepest possible
-    return (
-      oo && (
-        (oo[n] && findMostGranular(oo[n], topicRestArray, f))
-        || (oo['+'] && findMostGranular(oo['+'], topicRestArray, f))
-      ));
-  } else { // We are at the leaf, no more path, so look for n.field
-    let oo = o.topics // Next step depends on if org, project, node or topic
-    return (
-      ((typeof (f) === 'string') && oo[n] && oo[n][f])
-      || ((typeof (f) === 'function') && oo[n] && f(oo[n])) // f is never currerntly a function (Feb2026)
-    );
-  }
-}
-
 function isDuplicate(date, topic, value, rules, lastdate, lastvalue) {
   if (rules) {
     let ld = lastdate || 0;
@@ -378,11 +355,9 @@ class MqttOrganization {
      return schema;
    }
   // Search various places in priority order to get value for a field -
-  // This allows organizations to override modules override topics override default
+  // There used to be a way to override at organization or project level, but no longer -could add back in here if required but would need new way to configure it.
   findMostGranular(topicPathArray, field, def) { // topicPathArray = [ project, node, module, leaf ]
-    return findMostGranular(this.config_org, topicPathArray, field)
-      || this.schemaField(topicPathArray[2], topicPathArray[3], field)
-      || def;
+    return this.schemaField(topicPathArray[2], topicPathArray[3], field) || def;
   }
   // Check if should log this message
   shouldLog(date, topicPath, message) { // note message is string at this point
@@ -826,15 +801,6 @@ class MqttLogger {
 
   // reportNodes is used by the frugal-iot-server to report the last seen date of each node
   // noinspection JSUnusedGlobalSymbols
-  /*
-  OBSreportNodes() {  // { org: { project: { node: date }}}
-    let report = {};
-    Object.entries(this.clients).forEach(([k,v]) => { // Loop over organizations
-      report[k] = v.projects;
-    });
-    return report;
-  }
-  */
   reportNodes() {
     //TODO-58 filter by user having access
     let res = {};
