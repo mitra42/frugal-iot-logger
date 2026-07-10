@@ -1035,7 +1035,12 @@ class MqttLogger {
                  },
                  forms: [
                    {
-                     href: `${baseURI}/device/action?deviceId=${encodeURIComponent(deviceId_full)}&action=${encodeURIComponent(fieldKey)}`,
+                     // Root-relative (resolves against whatever origin fetched this schema, or against
+                     // the top-level "base" field above, per RFC3986) - matches the real mounted route,
+                     // API.md Section 6.6.2's GET companion. Includes /api explicitly rather than relying
+                     // on "base" to supply it, since root-relative refs resolve against base's authority
+                     // only, ignoring any path base may have.
+                     href: `/api/devices/action?deviceId=${encodeURIComponent(deviceId_full)}&action=${encodeURIComponent(fieldKey)}`,
                      contentType: 'application/json',
                      op: ['invokeaction']
                    }
