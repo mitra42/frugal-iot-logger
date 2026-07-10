@@ -235,12 +235,12 @@ class MqttOrganization {
     * @returns {Object} Schema for the module with fields array
     */
    schemaModule(module) {
+     const moduleConfig = this.config_schema.modules[module];
      const moduleSchema = {
-       name: module,
+       name: (moduleConfig && moduleConfig.name) || module,
        fields: []
      };
 
-     const moduleConfig = this.config_schema.modules[module];
      if (!moduleConfig || !moduleConfig.topics) {
        return moduleSchema; // Empty module if not defined
      }
@@ -907,15 +907,16 @@ class MqttLogger {
      * Build a schema field object according to WoT specification 5.3.1.1
      * Preserves Frugal IoT specific metadata in a frugal-iot namespace
      * @param {Object} fieldSchema - Field schema from our module
-     * @param {string} moduleName - Name of the module
+     * @param {string} moduleTitle - Display name of the module (e.g. "LED")
      * @param {boolean} isWritable - Whether this is a writable field
      * @returns {Object} WoT schema object with WoT standard fields and frugal-iot extensions
      */
-    buildWoTSchemaObject(fieldSchema, moduleName, isWritable) {
+    buildWoTSchemaObject(fieldSchema, moduleTitle, isWritable) {
+      const fieldName = fieldSchema.name || fieldSchema.field;
       const schemaObj = {
         type: this.mapTypeToWoT(fieldSchema.type),
-        title: fieldSchema.name || fieldSchema.field,
-        description: fieldSchema.name || fieldSchema.field
+        title: fieldName,
+        description: `${moduleTitle}: ${fieldName}`
       };
 
       // Add units if present
@@ -998,23 +999,33 @@ class MqttLogger {
          if (moduleSchema.fields) {
            moduleSchema.fields.forEach(field => {
              const fieldKey = `${moduleName}/${field.field}`;
-             const schemaObj = this.buildWoTSchemaObject(field, moduleName, false);
+             const schemaObj = this.buildWoTSchemaObject(field, moduleSchema.name, false);
+             const canRead = field.rw === 'r' || (field.rw && field.rw.includes('r'));
+             const canWrite = field.rw === 'w' || (field.rw && field.rw.includes('w'));
 
-             // Determine if this is a property (readable) or action (writable)
-             if (field.rw === 'r' || (field.rw && field.rw.includes('r'))) {
-               // This is readable - add as property
+             if (canRead) {
+               // Readable - a property. If it's ALSO writable, this one property affordance covers
+               // both: per the WoT spec, a form with op:["readproperty","writeproperty"] and no
+               // htv:methodName is split by a TD Processor into GET-to-read / PUT-to-write against the
+               // same href (the HTTP Binding's default op->method mapping) - so a writable field does
+               // NOT need a separate action entry, unlike before.
+               const op = canWrite ? ['readproperty', 'writeproperty'] : ['readproperty'];
                properties[fieldKey] = {
                  ...schemaObj,
                  forms: [
                    {
-                     href: `${baseURI}/devices/property?deviceId=${encodeURIComponent(deviceId_full)}&property=${encodeURIComponent(fieldKey)}`,
+                     // Root-relative (resolves against whatever origin fetched this schema, or against
+                     // the top-level "base" field above, per RFC3986) - matches the real mounted route.
+                     // Includes /api explicitly rather than relying on "base" to supply it, since
+                     // root-relative refs resolve against base's authority only, ignoring base's path.
+                     href: `/api/devices/property?deviceId=${encodeURIComponent(deviceId_full)}&property=${encodeURIComponent(fieldKey)}`,
                      contentType: 'application/json',
-                     op: ['readproperty']
+                     op
                    }
                  ]
                };
 
-               // Add MQTT binding if broker is provided
+               // Add MQTT binding(s) if broker is provided
                if (mqttBroker) {
                  properties[fieldKey].forms.push({
                    href: `${mqttBroker}/${deviceId_full}/${moduleName}/${field.field}`,
@@ -1022,24 +1033,28 @@ class MqttLogger {
                    op: ['readproperty'],
                    subprotocol: 'mqtt'
                  });
+                 if (canWrite) {
+                   properties[fieldKey].forms.push({
+                     href: `${mqttBroker}/${deviceId_full}/set/${moduleName}/${field.field}`,
+                     contentType: 'text/plain',
+                     op: ['writeproperty'],
+                     subprotocol: 'mqtt'
+                   });
+                 }
                }
-             }
-
-             if (field.rw === 'w' || (field.rw && field.rw.includes('w'))) {
-               // This is writable - add as action
+             } else if (canWrite) {
+               // Write-only, no readback - a genuine action (e.g. a momentary trigger), unlike a
+               // read-write field which is modelled as a property above.
                const actionObj = {
-                 title: field.name || field.field,
-                 description: field.name || field.field,
+                 title: schemaObj.title,
+                 description: schemaObj.description,
                  input: {
                    ...schemaObj
                  },
                  forms: [
                    {
-                     // Root-relative (resolves against whatever origin fetched this schema, or against
-                     // the top-level "base" field above, per RFC3986) - matches the real mounted route,
-                     // API.md Section 6.6.2's GET companion. Includes /api explicitly rather than relying
-                     // on "base" to supply it, since root-relative refs resolve against base's authority
-                     // only, ignoring any path base may have.
+                     // Root-relative - see the property href comment above for why /api is explicit here.
+                     // API.md Section 6.6.2's GET companion (6.6.2.1) is the form referenced here.
                      href: `/api/devices/action?deviceId=${encodeURIComponent(deviceId_full)}&action=${encodeURIComponent(fieldKey)}`,
                      contentType: 'application/json',
                      op: ['invokeaction']
@@ -1088,7 +1103,9 @@ class MqttLogger {
          'security': ['basic_sc'],
          "forms": [
            {
-             "href": `${baseURI}/property?deiceId=${encodeURIComponent(deviceId_full)}`,
+             // Root-relative, fixed typo (was "deiceId"), matches GET /devices/property with the
+             // "property" parameter omitted, which returns every readable field's current value.
+             "href": `/api/devices/property?deviceId=${encodeURIComponent(deviceId_full)}`,
              "op": "readallproperties",
              "contentType": "application/senml+json"
            },
@@ -1117,6 +1134,46 @@ class MqttLogger {
    }
 
   /**
+   * Get the current (last known) value of a single readable field for a device.
+   * Goes through MqttOrganization.findLastValue() rather than reading currentValue directly, so this
+   * stays correct if currentValue's internal representation changes (e.g. to a hierarchical structure).
+   * @param {string} org - Organization ID
+   * @param {string} project - Project ID
+   * @param {string} deviceId - Device ID
+   * @param {string} field - Field in "module/field" format
+   * @returns {*} The current value, or undefined if never seen or the organization is unknown
+   */
+  getPropertyValue(org, project, deviceId, field) {
+    const orgClient = this.clients[org];
+    if (!orgClient) { return undefined; }
+    return orgClient.findLastValue(`${org}/${project}/${deviceId}/${field}`);
+  }
+
+  /**
+   * Get current values for every field in a device's schema that has been seen at least once.
+   * @param {string} org - Organization ID
+   * @param {string} project - Project ID
+   * @param {string} deviceId - Device ID
+   * @returns {Object} Map of "module/field" -> current value
+   */
+  getDeviceCurrentValues(org, project, deviceId) {
+    const orgClient = this.clients[org];
+    if (!orgClient) { return {}; }
+    const nodeSchema = orgClient.schemaNode(deviceId);
+    const result = {};
+    Object.entries(nodeSchema.modules || {}).forEach(([moduleName, moduleSchema]) => {
+      (moduleSchema.fields || []).forEach(field => {
+        const fieldKey = `${moduleName}/${field.field}`;
+        const value = orgClient.findLastValue(`${org}/${project}/${deviceId}/${fieldKey}`);
+        if (value !== undefined) {
+          result[fieldKey] = value;
+        }
+      });
+    });
+    return result;
+  }
+
+  /**
    * Send action to device via MQTT
    * Publishes action to device control topic
    * @param {string} org - Organization ID
@@ -1142,7 +1199,7 @@ class MqttLogger {
 
         // Get organization client
         const orgClient = this.clients[org];
-        if (!orgClient || !orgClient.mqttClient) {
+        if (!orgClient || !orgClient.mqtt_client) {
           resolve({
             status: 'error',
             message: 'Organization not connected to MQTT'
@@ -1150,7 +1207,7 @@ class MqttLogger {
           return;
         }
 
-        const mqttClient = orgClient.mqttClient;
+        const mqttClient = orgClient.mqtt_client;
 
         // Check if MQTT client is connected
         if (!mqttClient.connected) {
@@ -1163,7 +1220,8 @@ class MqttLogger {
 
         // Build MQTT topic for control
         const topic = `${org}/${project}/${deviceId}/set/${module}/${field}`;
-        const message = String(value);
+        // Devices expect "1"/"0" for booleans, not JS's "true"/"false"
+        const message = typeof value === 'boolean' ? (value ? '1' : '0') : String(value);
 
         // Publish action
         mqttClient.publish(topic, message, { retain: false }, (err) => {
