@@ -204,9 +204,11 @@ class MqttOrganization {
     if (this.subscriptions.length === 0) { // connect is called after onReconnect - do not re-add subscriptions
       let o = this.config_org;
       this.subscribe(`${this.id}/#`, 0, this.messageReceived.bind(this));
-      for (let [pid, p] of Object.entries(o.projects)) {
-        this.watchProject(pid, p);
-        // Subscribe to everything on this organization - probably quicker than throwing stuff away
+      if (o.projects) {
+        for (let [pid, p] of Object.entries(o.projects)) {
+          this.watchProject(pid, p);
+          // Subscribe to everything on this organization - probably quicker than throwing stuff away
+        }
       }
     }
   }
