@@ -18,7 +18,7 @@ import admin from 'firebase-admin'; // Firebase Admin SDK
 // Ignore any of these legacy topic - should go away when MQTT memory next cleared as not in any current device
 // Still there as of 2026-02-24
 // Note - not being in this list should not be a problem - it will be ignored since type not found
-const legacytopics = ["wifistrength", "state", "co2", "auto", "reboot", "temp_setpoint", "temp_hysteresis", "temp_out"];
+const legacytopics = ["wifistrength", "state", "co2", "auto", "reboot", "temp_setpoint", "temp_hysteresis", "temp_out", "hysterisis"];
 const legacymodules = ["blinken_out","messages", "now"];
 
 // =========== Some generic helper functions, not specific to this client ========
@@ -57,10 +57,12 @@ function valueFromText(message, type) {
       if (message === "true") return 1;
       if (message === "false") return 0;
       return Number(message); // Message "0" or "1" and want to store number anyway
+    case "exponential":
+      return Number(message);
     case "float":
-      return Number(message)
+      return Number(message);
     case "int":
-      return Number(message)
+      return Number(message);
     case "topic":
       return message;
     case "text":
