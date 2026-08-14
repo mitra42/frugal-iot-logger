@@ -20,6 +20,10 @@ captive:
   name: Captive
   topics:
     - leaf:     language_code
+carousel:
+  name: Display carousel
+  topics:
+    - leaf:     select
 controlblinken:
   name: "Control Blinken"
   topics:
@@ -171,6 +175,11 @@ ota:
   insidefrugaliot: true
   topics:
     - leaf:     key
+rain:
+  name: Rain
+  topics:
+    - leaf: rain
+    - leaf: mm
 relay:
   name: Relay
   topics:

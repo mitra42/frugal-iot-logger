@@ -326,6 +326,21 @@ message:
   wireable: true
   rw:       w
   retain:   true
+mm:
+  leaf:     mm
+  name:     Accumulated Rain
+  type:     float
+  display:  text
+  min:      0
+  max:      500
+  color:    blue
+  rw:       r
+  log:      true
+  duplicates:
+    significantdate: 900000
+    significantvalue: 1
+  graphable:  true
+  units:    mm
 name:
   leaf:     name
   slot:     name
@@ -373,6 +388,21 @@ pressure:
     significantdate: 900000
     significantvalue: 1
   graphable:  true
+rain:
+  leaf:     rain
+  name:     Rain
+  type:     float
+  display:  text
+  min:      0
+  max:      500
+  color:    blue
+  rw:       r
+  log:      true
+  duplicates:
+    significantdate: 900000
+    significantvalue: 1
+  graphable:  true
+  units:    mm/hr
 satellites:
   leaf:     satellites
   name:     Satellites
@@ -388,6 +418,16 @@ satellites:
   rw:       r
   graphable:  false
   units:    m/s
+select:
+  leaf:     select
+  name:     Select
+  type:     int
+  min:      0
+  display:  text
+  color:    black
+  wireable: false
+  rw:       w
+  retain:   true
 speed:
   leaf:     speed
   name:     Speed
