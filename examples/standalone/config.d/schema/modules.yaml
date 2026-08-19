@@ -7,11 +7,45 @@
 # topics: list of topics, each with leaf, optionally leaf_from if it should be copied, and optionally any fields of topics to be overridden
 # slot: if it is supposed to fit in a specific slot of frugaliot
 # insidefrugaliot: true if it should be hidden inside the Frugal_IoT drop-down on the name of a sensor, false or not set if it should be shown as a separate module
+aht20:
+  name: "AHT20"
+  topics:
+    - leaf: temperature
+    - leaf: humidity
+aht21:
+  name: "AHT21"
+  topics:
+    - leaf: temperature
+    - leaf: humidity
 battery:
   name: "Battery"
   insidefrugaliot: true
   topics:
     - leaf:   battery
+bme280:
+  name: "BME280"
+  topics:
+    - leaf: temperature
+    - leaf: humidity
+    - leaf: pressure
+      max:  1100
+      min:  300
+bme680:
+  name: "BME680"
+  topics:
+    - leaf: temperature
+    - leaf: humidity
+    - leaf: pressure
+      max:  1100
+      min:  300
+    - leaf: gas
+bmp280:
+  name: "BMP280"
+  topics:
+    - leaf: temperature
+    - leaf: pressure
+      max:  1100
+      min:  300
 button:
   name: Button
   topics:
@@ -112,6 +146,39 @@ ds18b20:
   topics:
     - leaf: ds18b20
       leaf_from: temperature
+do:
+  name: "Dissolved Oxygen"
+  topics:
+    - leaf: do
+    - leaf: temperature
+      leaf_from: controlfloat
+      name: Water Temperature
+      min:  -10
+      max:  50
+      color: red
+ens160:
+  name: "ENS160"
+  topics:
+    # temperature and humidity are *inputs* here - the compensation values, wired from
+    # whichever sensor is providing them (aht21/... on the combined ENS160+AHT21 board)
+    - leaf: temperature
+      leaf_from: controlfloat
+      name: Temperature In
+      min:  0
+      max:  50
+      color: red
+    - leaf: humidity
+      leaf_from: controlfloat
+      name: Humidity In
+      min:  0
+      max:  100
+      color: blue
+    - leaf: aqi
+    - leaf: tvoc
+    - leaf: eco2
+    - leaf: aqi500
+# Legacy - firmware before the ENS160/AHT21 split published everything under one module id.
+# Kept so already-deployed nodes still display; new nodes use `ens160` and `aht21` above.
 ensaht:
   name: "ENS AHT"
   topics:
@@ -120,7 +187,7 @@ ensaht:
     - leaf:  aqi
     - leaf:  tvoc
     - leaf:  eco2
-    - leaf:  agi500
+    - leaf:  aqi500
 frugal_iot:
   name: XXX
   topics:
@@ -138,6 +205,8 @@ gps:
     - leaf:     speed
     - leaf:     satellites
     - leaf:     hdop
+    - leaf:     position
+    - leaf:     utc_time
 health:
   name: System
   insidefrugaliot: true
@@ -149,6 +218,18 @@ ht:
   topics:
     - leaf: temperature
     - leaf: humidity
+ina219:
+  name: "Power Monitor"
+  topics:
+    - leaf: shunt
+    - leaf: bus
+    - leaf: current
+    - leaf: power
+    - leaf: load
+lcd:
+  name: LCD
+  topics:
+    - leaf: message
 ledbuiltin:
   name: LED
   slot: ledbuiltin
@@ -193,3 +274,7 @@ soil:
   name: Soil
   topics:
     - leaf: soil
+ultrasonic:
+  name: "Ultrasonic Distance"
+  topics:
+    - leaf: ultrasonic

@@ -91,6 +91,21 @@ brightness:
   min:      0
   display:  slider
   rw:       w
+bus:
+  leaf:     bus
+  name:     Bus Voltage
+  type:     float
+  display:  text
+  min:      0
+  max:      32
+  color:    green
+  rw:       r
+  log:      true
+  units:    V
+  duplicates:
+    significantdate: 900000
+    significantvalue: 0.1
+  graphable:  true
 button:
   leaf:     button
   name:     Button
@@ -163,6 +178,21 @@ course:
   rw:       r
   graphable:  true
   units:    deg
+current:
+  leaf:     current
+  name:     Current
+  type:     float
+  display:  text
+  min:      -3200
+  max:      3200
+  color:    red
+  rw:       r
+  log:      true
+  units:    mA
+  duplicates:
+    significantdate: 900000
+    significantvalue: 1
+  graphable:  true
 description:
   leaf:     description
   slot:     description
@@ -171,6 +201,21 @@ description:
   display:  text
   rw:       w
   retain:   true
+do:
+  leaf:     do
+  name:     Dissolved Oxygen
+  type:     float
+  display:  bar
+  min:      0
+  max:      20
+  color:    blue
+  rw:       r
+  log:      true
+  units:    mg/L
+  duplicates:
+    significantdate: 900000
+    significantvalue: 0.1
+  graphable:  true
 eco2:
   leaf:     eco2
   name:     eCO2
@@ -185,6 +230,21 @@ eco2:
     significantdate: 900000
     significantvalue: 5
   rw:       r
+  graphable:  true
+gas:
+  leaf:     gas
+  name:     Gas Resistance
+  type:     float
+  display:  text
+  min:      0
+  max:      500
+  color:    green
+  rw:       r
+  log:      true
+  units:    kOhm
+  duplicates:
+    significantdate: 900000
+    significantvalue: 1
   graphable:  true
 hdop:
   leaf:     hdop
@@ -257,6 +317,21 @@ latitude:
   rw:       r
   graphable:  true
   units:    lat
+load:
+  leaf:     load
+  name:     Load Voltage
+  type:     float
+  display:  text
+  min:      0
+  max:      32
+  color:    green
+  rw:       r
+  log:      true
+  units:    V
+  duplicates:
+    significantdate: 900000
+    significantvalue: 0.1
+  graphable:  true
 loadcell:
   leaf:     loadcell
   name:     Load Cell
@@ -374,6 +449,28 @@ out:
   duplicates:
     significantdate: 900000
     significantvalue: 1
+position:
+  leaf:     position
+  name:     Position
+  type:     text
+  display:  text
+  color:    black
+  rw:       r
+power:
+  leaf:     power
+  name:     Power
+  type:     float
+  display:  text
+  min:      0
+  max:      100000
+  color:    orange
+  rw:       r
+  log:      true
+  units:    mW
+  duplicates:
+    significantdate: 900000
+    significantvalue: 10
+  graphable:  true
 pressure:
   leaf:     pressure
   name:     Pressure
@@ -428,6 +525,21 @@ select:
   wireable: false
   rw:       w
   retain:   true
+shunt:
+  leaf:     shunt
+  name:     Shunt Voltage
+  type:     float
+  display:  text
+  min:      -320
+  max:      320
+  color:    blue
+  rw:       r
+  log:      true
+  units:    mV
+  duplicates:
+    significantdate: 900000
+    significantvalue: 1
+  graphable:  true
 speed:
   leaf:     speed
   name:     Speed
@@ -512,6 +624,29 @@ tvoc:
     significantdate: 900000
     significantvalue: 1
   graphable:  true
+ultrasonic:
+  leaf:     ultrasonic
+  name:     Distance
+  type:     float
+  display:  bar
+  min:      0
+  max:      7500
+  color:    blue
+  rw:       r
+  log:      true
+  units:    mm
+  duplicates:
+    significantdate: 900000
+    significantvalue: 5
+  graphable:  true
+  calibrate:  true
+utc_time:
+  leaf:     utc_time
+  name:     UTC Time
+  type:     text
+  display:  text
+  color:    black
+  rw:       r
 wifibars:
   leaf:     wifibars
   name:     WiFi
