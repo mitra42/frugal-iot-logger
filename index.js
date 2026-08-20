@@ -9,7 +9,7 @@
 
 import async from 'async'; // https://caolan.github.io/async/v3/docs.html
 import yaml from 'js-yaml'; // https://www.npmjs.com/package/js-yaml
-import { appendFile, mkdir, readFile, readdir } from "fs"; // https://nodejs.org/api/fs.html
+import { appendFile, appendFileSync, mkdir, mkdirSync, readFile, readdir } from "fs"; // https://nodejs.org/api/fs.html
 import mqtt from 'mqtt'; // https://www.npmjs.com/package/mqtt
 import admin from 'firebase-admin'; // Firebase Admin SDK
 //import tospliced from 'array.prototype.tospliced'; // tospliced only in Node > 20 (and webstorm currently 18)
@@ -20,6 +20,14 @@ import admin from 'firebase-admin'; // Firebase Admin SDK
 // Note - not being in this list should not be a problem - it will be ignored since type not found
 const legacytopics = ["wifistrength", "state", "co2", "auto", "reboot", "temp_setpoint", "temp_hysteresis", "temp_out", "hysterisis"];
 const legacymodules = ["blinken_out","messages", "now"];
+
+// =======
+// Report every message received on the console. That is one line per message, which on a server
+// whose console goes to the systemd journal means one write to disk per message - too much for a
+// machine running from an SD card, where writes wear the card out. Set "verbose: false" in
+// config.d/logger.yaml to turn it off; left on when the setting is absent so that an existing
+// server keeps behaving as it did. Set from the config in MqttLogger.start().
+let verbose = true;
 
 // =========== Some generic helper functions, not specific to this client ========
 // Clean any leading "/" or "../" from a string so it can be safely appended to a path
@@ -107,6 +115,117 @@ class Subscription {
   }
 
 }
+// ========= Collecting readings in memory, and writing them out a batch at a time =========
+// Writing each reading to its file as it arrives is what wears out an SD card. Each one is an
+// open-write-close of its own, and since there is a file per topic per day the writes are spread
+// over a hundred or more files, so nothing coalesces them. Instead rows are collected here and
+// written a batch at a time - one write per file per flush, however many readings arrived.
+//
+// The cost is that readings not yet written exist only in memory, so pulling the power loses up to
+// "flushseconds" of them. Stopping the server cleanly writes them out first (see the signal
+// handlers in MqttLogger.start), and so does reading the data back, because the server flushes
+// before serving anything out of data/.
+
+const pending = new Map();   // "path/filename" -> lines waiting to be written to that file
+let pendingRows = 0;         // counted across every file, so one limit covers them all
+const knownDirs = new Set(); // directories already created, so mkdir is not called per reading
+let flushSeconds = 0;        // 0 = write each reading as it arrives, which is what older versions did
+let flushTimer = null;
+let flushing = false;        // a batch is being written right now
+let flushWaiting = [];       // callbacks that arrived during that write and need one of their own
+
+// Write out early if this many rows are waiting, rather than holding them for the full interval.
+// A row is a few dozen bytes, so this is little memory - the point is that a server with many
+// nodes never sits on an unbounded amount of unwritten data.
+const FLUSH_MAX_ROWS = 2000;
+
+function appendPending(path, filename, message) {
+  let key = `${path}/${filename}`;
+  let lines = pending.get(key);
+  if (lines) { lines.push(message); } else { pending.set(key, [message]); }
+  pendingRows++;
+  if (!flushSeconds || (pendingRows >= FLUSH_MAX_ROWS)) {
+    flushPending();
+  }
+}
+
+// Write everything waiting, then call back. Safe to call at any time, including when there is
+// nothing to write, which is what makes it cheap enough to call before serving a request.
+function flushPending(cb) {
+  cb = cb || (() => {});
+  if (flushing) {
+    // Rows may arrive after the batch now being written was taken, so a caller who asked while it
+    // was running gets a flush of its own once this one is finished, rather than joining it.
+    flushWaiting.push(cb);
+    return;
+  }
+  if (!pending.size) { cb(); return; }
+  flushing = true;
+  let batch = [...pending.entries()];
+  pending.clear();
+  pendingRows = 0;
+  // One file at a time: a Pi Zero W has one core and little memory, and there is no hurry
+  async.eachSeries(batch, ([key, lines], cb1) => {
+    let write = () => appendFile(key, lines.join(''), (err) => {
+      // Nothing is retried and nothing is put back: if the card is full or read-only, holding the
+      // rows would grow memory until the process died, which is worse than losing them noisily.
+      if (err) console.error("Could not write", key, "-", err.message, `(${lines.length} readings lost)`);
+      cb1(null);
+    });
+    let dir = key.substring(0, key.lastIndexOf('/'));
+    if (knownDirs.has(dir)) {
+      write();
+    } else {
+      mkdir(dir, {recursive: true}, (err) => {
+        if (err) {
+          console.error("Could not create", dir, "-", err.message, `(${lines.length} readings lost)`);
+          cb1(null);
+        } else {
+          knownDirs.add(dir);
+          write();
+        }
+      });
+    }
+  }, (err) => {
+    flushing = false;
+    let waiting = flushWaiting;
+    flushWaiting = [];
+    cb(err);
+    if (waiting.length) {
+      flushPending((err2) => waiting.forEach((w) => w(err2)));
+    }
+  });
+}
+
+// Last resort, for the process ending some way other than a signal - an uncaught exception, or
+// simply nothing left to do. Node allows no asynchronous work once "exit" has been reached, so
+// this is the one place the writes have to be synchronous.
+function flushPendingSync() {
+  if (!pending.size) return;
+  for (let [key, lines] of pending.entries()) {
+    try {
+      let dir = key.substring(0, key.lastIndexOf('/'));
+      if (!knownDirs.has(dir)) { mkdirSync(dir, {recursive: true}); knownDirs.add(dir); }
+      appendFileSync(key, lines.join(''));
+    } catch (err) {
+      console.error("Could not write", key, "while stopping -", err.message);
+    }
+  }
+  pending.clear();
+  pendingRows = 0;
+}
+
+// Called from MqttLogger.start once the config has been read
+function startFlushing(seconds) {
+  flushSeconds = seconds || 0;
+  if (flushTimer) { clearInterval(flushTimer); flushTimer = null; }
+  if (flushSeconds > 0) {
+    flushTimer = setInterval(() => flushPending(), flushSeconds * 1000);
+    if (flushTimer.unref) flushTimer.unref(); // Never a reason to keep the process alive just for this
+    console.log("Collecting readings in memory, writing them out every", flushSeconds, "seconds");
+  }
+}
+
 // ================== MQTT Client embedded in server ========================
 
 // Manages a connection to a broker - each organization needs its own connection
@@ -165,7 +284,7 @@ class MqttOrganization {
       this.mqtt_client.on("message", (topic, message) => {
         // message is Buffer
         let msg = message.toString();
-        console.log("Received", topic, " ", msg);
+        if (verbose) console.log("Received", topic, " ", msg);
         this.dispatch(topic, msg);
       });
     }
@@ -442,15 +561,7 @@ class MqttOrganization {
     this.appendPathFile(path, filename, `${date.valueOf()},"${message}"\n`);
   }
   appendPathFile(path, filename, message) {
-    mkdir(path, {recursive: true}, (err/*, val*/) => {
-      if (err) {
-        console.error(err);
-      } else {
-        appendFile(path + "/" + filename, message, (err) => {
-          if (err) console.log(err);
-        });
-      }
-    })
+    appendPending(path, filename, message);
   }
   gsheetsSubscribe() {
     if (this.gsheets.length === 0) { // connect is called after onReconnect - do not re-add subscriptions
@@ -1250,8 +1361,41 @@ class MqttLogger {
     });
   }
 
+  // Write out any readings still held in memory. The server calls this before serving anything from
+  // data/, so a graph never misses readings just because they have not been written out yet.
+  flush(cb) {
+    flushPending(cb);
+  }
+
+  // Being stopped is normal - "systemctl restart frugaliot" does it, and the unit restarts the
+  // server on failure too. Node's default action on these signals is to exit immediately, which
+  // would throw away every reading collected since the last write, so catch them and write first.
+  catchSignals() {
+    if (this.signalsCaught) return; // start() could be called more than once
+    this.signalsCaught = true;
+    for (let sig of ['SIGTERM', 'SIGINT']) {
+      process.on(sig, () => {
+        console.log(`Received ${sig} - writing out readings held in memory before stopping`);
+        flushPending(() => process.exit(0));
+      });
+    }
+    // Covers every other way of stopping - an uncaught exception, or the process simply running
+    // out of things to do - where there is no opportunity to write anything asynchronously
+    process.on('exit', () => flushPendingSync());
+  }
+
   // Start the logger, iterating over config.organizations and starting an MQTT client for each
   start() {
+    let clog = this.config.logger || {};
+    // Absent means true, so a server that has never been told either way keeps reporting messages
+    if (clog.verbose === false) {
+      verbose = false;
+      console.log("Logger not reporting individual messages (verbose: false in config.d/logger.yaml)");
+    }
+    // Absent means 0, writing each reading as it arrives, so an existing server is not silently
+    // given a window in which a power cut would lose readings.
+    startFlushing(clog.flushseconds);
+    this.catchSignals();
     // noinspection JSUnresolvedReference
     for (let [oid, oconfig] of Object.entries(this.config.organizations)) {
       let c = new MqttOrganization(oid, oconfig, this.config.mqtt, this.config.schema); // Will subscribe when connects
