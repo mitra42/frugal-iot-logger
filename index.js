@@ -347,8 +347,13 @@ class MqttOrganization {
      let moduleTopicSchema = moduleSchema && moduleSchema.topics.find(t => (t.leaf === leaf));
      let topicLeaf = (moduleTopicSchema && moduleTopicSchema["leaf_from"]) || leaf; // Always exists - at worst, if no module, its leaf directly to topics
      let topicSchema = this.config_schema.topics[topicLeaf];
-     // Check for override in the module schema, otherwise from topic schema
-     return ((moduleTopicSchema && moduleTopicSchema[field]) || (topicSchema && topicSchema[field])); // could be undefined
+     // Check for override in the module schema, otherwise from topic schema.
+     // Whether the field is there at all, not whether its value is truthy: "log: false",
+     // "wireable: false" and "min: 0" are all settings somebody wrote deliberately, and an "||"
+     // here would step over them and use the topic's value instead.
+     if (moduleTopicSchema && (moduleTopicSchema[field] !== undefined)) return moduleTopicSchema[field];
+     if (topicSchema && (topicSchema[field] !== undefined)) return topicSchema[field];
+     return undefined;
    }
 
    /**
@@ -480,7 +485,10 @@ class MqttOrganization {
   // Search various places in priority order to get value for a field -
   // There used to be a way to override at organization or project level, but no longer -could add back in here if required but would need new way to configure it.
   findMostGranular(topicPathArray, field, def) { // topicPathArray = [ project, node, module, leaf ]
-    return this.schemaField(topicPathArray[2], topicPathArray[3], field) || def;
+    // The default applies when the schema does not mention the field, not when its value happens to
+    // be falsy - otherwise "log: false" in the schema would be overruled by the default
+    let found = this.schemaField(topicPathArray[2], topicPathArray[3], field);
+    return (found === undefined) ? def : found;
   }
   // Check if should log this message
   shouldLog(date, topicPath, message) { // note message is string at this point

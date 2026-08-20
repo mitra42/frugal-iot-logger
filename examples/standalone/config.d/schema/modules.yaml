@@ -150,29 +150,9 @@ do:
   name: "Dissolved Oxygen"
   topics:
     - leaf: do
-    - leaf: temperature
-      leaf_from: controlfloat
-      name: Water Temperature
-      min:  -10
-      max:  50
-      color: red
 ens160:
   name: "ENS160"
   topics:
-    # temperature and humidity are *inputs* here - the compensation values, wired from
-    # whichever sensor is providing them (aht21/... on the combined ENS160+AHT21 board)
-    - leaf: temperature
-      leaf_from: controlfloat
-      name: Temperature In
-      min:  0
-      max:  50
-      color: red
-    - leaf: humidity
-      leaf_from: controlfloat
-      name: Humidity In
-      min:  0
-      max:  100
-      color: blue
     - leaf: aqi
     - leaf: tvoc
     - leaf: eco2

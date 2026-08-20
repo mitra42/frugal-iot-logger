@@ -17,6 +17,13 @@
 # graphable  true if can be displayed on a graph
 # wireable true,false, generally only  controls are wireable
 # wired not valid in this context, it will come from MQTT broker
+# log  whether readings of this topic are recorded to disk. Say so either way on every topic: with
+#   no setting at all, any float, int or bool with "rw: r" is recorded, which is easy to be
+#   surprised by. scripts/check-schema.js warns about a topic that does not say.
+# duplicates  when to bother recording a reading: significantvalue is how much it has to have moved
+#   since the last one recorded, significantdate how long (in milliseconds) since that one, and a
+#   reading that meets neither is dropped. Every topic with "log: true" wants a rule here - without
+#   one, every reading is written to the SD card as it arrives, which wears the card out.
 # Note battery gets special cased
 # See https://www.iana.org/assignments/senml/senml.xhtml for units
 altitude:
@@ -40,6 +47,11 @@ analog:
   rw:       r
   graphable:  true
   log:      true
+  # A raw ADC reading with no declared range, so this threshold is a guess - lower it if real
+  # changes are being missed, raise it if the graph is mostly noise
+  duplicates:
+    significantdate: 900000
+    significantvalue: 10
 aqi:
   leaf:     aqi
   name:     AQI
@@ -87,6 +99,7 @@ brightness:
   leaf:     brightness
   name:     Brightness
   type:     int
+  log:      false
   max:      255
   min:      0
   display:  slider
@@ -110,13 +123,19 @@ button:
   leaf:     button
   name:     Button
   type:     bool
+  log:      true
   display:  toggle
   color:    black
   rw:       r
+  # A press changes the value, so it is still recorded - this only drops the repeats in between
+  duplicates:
+    significantdate: 900000
+    significantvalue: 1
 color:
   leaf:     color
   name:     Color
   type:     color
+  log:      false
   display:  color
   rw:       w
 controlfloat:
@@ -124,6 +143,7 @@ controlfloat:
   min:      0
   max:      100
   type:     float
+  log:      false
   display:  text
   color:    black
   wireable: true
@@ -134,6 +154,7 @@ controlint:
   min:      0
   max:      65535
   type:     int
+  log:      false
   display:  text
   color:    black
   wireable: true
@@ -144,6 +165,7 @@ controltext:
   min:      0
   max:      100
   type:     text
+  log:      false
   display:  text
   color:    black
   wireable: true
@@ -152,6 +174,7 @@ controltext:
 controlintoggle:
   #[leaf, name] should be overridden
   type:     bool
+  log:      false
   display:  toggle
   color:    black
   rw:       w
@@ -159,10 +182,15 @@ controlintoggle:
 controlouttoggle:
   #[leaf, name] should be overridden
   type:     bool
+  log:      true
   display:  toggle
   color:    black
   rw:       r
   wireable: true
+  # Read-only bool, so logged by default - match the "out" and "on" topics it stands in for
+  duplicates:
+    significantdate: 900000
+    significantvalue: 1
 course:
   leaf:     course
   name:     Course
@@ -198,6 +226,7 @@ description:
   slot:     description
   name:     Description
   type:     text
+  log:      false
   display:  text
   rw:       w
   retain:   true
@@ -280,18 +309,21 @@ id:
   slot:     id
   name:     Node ID
   type:     text
+  log:      false
   display:  text
   rw:       r
 key:
   leaf:     key
   name:     Key
   type:     text
+  log:      false
   display:  text
   rw:       r
 languagecode:
   leaf:     languagecode
   name:     Language
   type:     text
+  log:      false
   display:  text
   color:    black
   rw:       r
@@ -300,6 +332,7 @@ lastseen:
   slot:     lastseen
   name:     Last Seen
   type:     text
+  log:      false
   display:  text
   rw:       r
 latitude:
@@ -396,6 +429,7 @@ message:
   min:      0
   max:      100
   type:     text
+  log:      false
   display:  text
   color:    black
   wireable: true
@@ -421,6 +455,7 @@ name:
   slot:     name
   name:     Node Name
   type:     text
+  log:      false
   display:  text
   rw:       w
   retain:   true
@@ -453,6 +488,7 @@ position:
   leaf:     position
   name:     Position
   type:     text
+  log:      false
   display:  text
   color:    black
   rw:       r
@@ -519,6 +555,7 @@ select:
   leaf:     select
   name:     Select
   type:     int
+  log:      false
   min:      0
   display:  text
   color:    black
@@ -593,6 +630,7 @@ timeoff:
   min:      0
   max:      3600
   type:     float
+  log:      false
   display:  text
   color:    black
   rw:       w
@@ -604,6 +642,7 @@ timeon:
   min:      0
   max:      3600
   type:     float
+  log:      false
   display:  text
   color:    black
   rw:       w
@@ -644,6 +683,7 @@ utc_time:
   leaf:     utc_time
   name:     UTC Time
   type:     text
+  log:      false
   display:  text
   color:    black
   rw:       r
@@ -651,15 +691,22 @@ wifibars:
   leaf:     wifibars
   name:     WiFi
   type:     int
+  log:      true
   display:  text
   min:      0
   max:      4
   color:    blue
   rw:       r
+  # Logged, because an int that is read-only is logged unless told otherwise. Only 5 values, so
+  # any change is worth recording and nothing else is
+  duplicates:
+    significantdate: 900000
+    significantvalue: 1
 wifissid:
   leaf:     wifissid
   name:     SSID
   type:     text
+  log:      false
   display:  text
   color:    blue
   rw:       r
