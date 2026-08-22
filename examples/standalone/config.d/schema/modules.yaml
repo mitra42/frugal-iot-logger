@@ -153,6 +153,20 @@ do:
 ens160:
   name: "ENS160"
   topics:
+    # Compensation inputs, not readings. The ENS160 has no thermometer of its own: it takes
+    # ambient temperature and humidity from whatever is wired to it - an AHT21 sitting on the
+    # same breakout, or any other sensor on the node. So these come from controlfloat (wireable,
+    # rw: w, not logged) rather than from the temperature/humidity topics, which are read-only
+    # readings - whichever sensor actually measures them is the one that logs them.
+    - leaf: temperature
+      leaf_from: controlfloat
+      name: Temperature
+      max:  50
+      color: red
+    - leaf: humidity
+      leaf_from: controlfloat
+      name: Humidity
+      color: blue
     - leaf: aqi
     - leaf: tvoc
     - leaf: eco2

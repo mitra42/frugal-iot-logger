@@ -319,8 +319,8 @@ key:
   log:      false
   display:  text
   rw:       r
-languagecode:
-  leaf:     languagecode
+language_code:
+  leaf:     language_code
   name:     Language
   type:     text
   log:      false
