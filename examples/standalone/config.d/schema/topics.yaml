@@ -21,7 +21,8 @@
 #   no setting at all, any float, int or bool with "rw: r" is recorded, which is easy to be
 #   surprised by. scripts/check-schema.js warns about a topic that does not say.
 # duplicates  when to bother recording a reading: significantvalue is how much it has to have moved
-#   since the last one recorded, significantdate how long (in milliseconds) since that one, and a
+#   since the last one recorded - either an absolute amount e.g. 0.5, or as a percentage of the last
+#   reading e.g. "2%" - significantdate how long (in milliseconds) since that one, and a
 #   reading that meets neither is dropped. Every topic with "log: true" wants a rule here - without
 #   one, every reading is written to the SD card as it arrives, which wears the card out.
 # Note battery gets special cased

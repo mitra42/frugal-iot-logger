@@ -47,12 +47,24 @@ function XXX(args) {
   return false;
 }
 
+// significantvalue can be an absolute delta e.g. 0.5, or a percentage of the last value e.g. "2%"
+// Returns true if value has moved far enough from lv to be worth recording.
+function significantlyDifferent(value, lv, significantvalue) {
+  if (typeof(significantvalue) === 'string' && significantvalue.trim().endsWith('%')) {
+    let pct = Number(significantvalue.trim().slice(0, -1));
+    if (isNaN(pct)) { return XXX(["Unparsable significantvalue percentage", significantvalue]); }
+    if (lv === 0) { return value !== 0; } // Can't take a percentage of zero, any change is significant
+    return (Math.abs(value - lv) / Math.abs(lv) * 100) >= pct;
+  }
+  return Math.abs(value - lv) >= significantvalue;
+}
+
 function isDuplicate(date, topic, value, rules, lastdate, lastvalue) {
   if (rules) {
     let ld = lastdate || 0;
     let lv = lastvalue || 0;
     if ((date === ld) && (value === lv)) return true; // Eliminate any exact duplicates
-    if (rules.significantvalue && (Math.abs(value - lv) >= rules.significantvalue)) { return false; }
+    if (rules.significantvalue && significantlyDifferent(value, lv, rules.significantvalue)) { return false; }
     if (rules.significantdate && ((date-ld) >= rules.significantdate)) { return false; }
     if (rules.significantdate || rules.significantvalue) { return true; } // Conditions but didn't meet any of them
   }

@@ -160,6 +160,12 @@ Topics and modules can be overridden at multiple levels:
 3. **Organization level** - Organization-specific override
 4. **Node/Project level** - Granular per-device override
 
+### Schema Files Are Copies
+
+The schema files under `examples/*/config.d/schema/` (topics.yaml, modules.yaml) are **copies**.
+The master lives in `../frugal-iot-server/config.d/schema/`. Any change made here must also be
+made there, and all the example copies kept identical to it.
+
 ## Message Processing Pipeline
 
 ```
@@ -367,6 +373,17 @@ duplicates:
   significantvalue: 0.5     # Skip if value change < 0.5
 ```
 
+`significantvalue` may also be a percentage of the last recorded value, written as a
+string ending in `%`:
+
+```yaml
+duplicates:
+  significantdate: 60000
+  significantvalue: "2%"    # Skip if value changed by less than 2% of the last reading
+```
+
+If the last recorded value is 0, any non-zero reading counts as significant.
+
 If **both** rules are specified, message is skipped if **neither** condition is met.
 
 ## Firebase Integration
@@ -441,6 +458,8 @@ Each tick sends:
 3. Set `rw` (read-only = "r", writable = "w")
 4. Add to module definition in `config.d/schema/modules.yaml`
 5. Data automatically logged and forwarded
+6. Mirror the same edit into `../frugal-iot-server/config.d/schema/` (the master) and the
+   other `examples/*/config.d/schema/` copies
 
 ### Debugging Device Issues
 
