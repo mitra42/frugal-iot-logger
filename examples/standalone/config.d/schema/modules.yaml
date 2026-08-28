@@ -64,37 +64,6 @@ controlblinken:
     - leaf:     timeon
     - leaf:     timeoff
     - leaf:     out
-climate:
-  name: Climate
-  topics:
-    - leaf: temperature_now
-      leaf_from: controlfloat
-      name: Temperature Now
-    - leaf: temperature_setpoint
-      leaf_from: controlfloat
-      wireable: false
-      name: Temperature Setpoint
-    - leaf: temperature_hysteresis
-      leaf_from: controlfloat
-      wireable: false
-      name: Temperature Hysteresis
-    - leaf: humidity_now
-      leaf_from: controlfloat
-      name: Humidity Now
-    - leaf: humidity_setpoint
-      leaf_from: controlfloat
-      name: Humidity Setpoint
-      wireable: false
-    - leaf: humidity_hysteresis
-      leaf_from: controlfloat
-      name: Humidity Hysteresis
-      wireable: false
-    - leaf: temperature_out
-      leaf_from: controlouttoggle
-      name: Temperature Out
-    - leaf: humidity_out
-      leaf_from: controlouttoggle
-      name: Humidity Out
 controlhysteresis:
   name: Control
   topics:
