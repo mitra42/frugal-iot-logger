@@ -7,6 +7,9 @@
 # topics: list of topics, each with leaf, optionally leaf_from if it should be copied, and optionally any fields of topics to be overridden
 # slot: if it is supposed to fit in a specific slot of frugaliot
 # insidefrugaliot: true if it should be hidden inside the Frugal_IoT drop-down on the name of a sensor, false or not set if it should be shown as a separate module
+# summary: false to keep this module off a device's one-line summary. Omitted means it contributes -
+#   default-visible, because a new sensor that is silently invisible until someone remembers a flag
+#   is the worse failure. insidefrugaliot modules never contribute; they feed the status strip.
 aht20:
   name: "AHT20"
   topics:
@@ -28,33 +31,30 @@ bme280:
     - leaf: temperature
     - leaf: humidity
     - leaf: pressure
-      max:  1100
-      min:  300
 bme680:
   name: "BME680"
   topics:
     - leaf: temperature
     - leaf: humidity
     - leaf: pressure
-      max:  1100
-      min:  300
     - leaf: gas
 bmp280:
   name: "BMP280"
   topics:
     - leaf: temperature
     - leaf: pressure
-      max:  1100
-      min:  300
 button:
+  summary: false   # transient - a press is not a state worth a summary line
   name: Button
   topics:
     - leaf:     button
 captive:
+  summary: false   # a language code is not a reading
   name: Captive
   topics:
     - leaf:     language_code
 carousel:
+  summary: false   # a display selector is not a reading
   name: Display carousel
   topics:
     - leaf:     select
@@ -152,6 +152,7 @@ ensaht:
     - leaf:  eco2
     - leaf:  aqi500
 frugal_iot:
+  summary: false   # this is the card identity, not a module on it
   name: XXX
   topics:
     - leaf:     id
@@ -190,6 +191,7 @@ ina219:
     - leaf: power
     - leaf: load
 lcd:
+  summary: false   # a message is not a reading
   name: LCD
   topics:
     - leaf: message

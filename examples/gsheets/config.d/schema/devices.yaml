@@ -1,0 +1,63 @@
+# Which readings appear on a device's card, and in what order.
+#
+# Keys match the OTA key, which the firmware builds as SYSTEM_OTA_PREFIX "_" SYSTEM_OTA_SUFFIX -
+# the application, then the board (see src/system/ota.cpp). So sht30 built for ten boards gives ten
+# keys, sht30_c3_pico, sht30_d1_mini, ... all wanting the same card. Resolution order is:
+#   1. an exact match on the device id         e.g. esp8266-fb94bb
+#   2. an exact match on the full OTA key      e.g. sht30_c3_pico
+#   3. the longest key the OTA key starts with e.g. sht30
+# Longest wins at step 3, so file order never matters and sht30 beats sht.
+#
+# front:   the ordered rows on the front of the card. An entry containing "/" is a twig
+#          (module/leaf); one without is a control module, shown as its single control row.
+# summary: the one-line summary. Optional, and usually best omitted - it defaults to the first few
+#          entries of front, which now includes a control, shown compactly as "Relay ✓".
+#
+# An application with no entry gets the default: graphable readings, then actuators, then controls.
+# That is the right answer whenever the order does not matter, so most applications belong here only
+# if they want something specific. Module ids are the keys of modules.yaml - note the BH1750 sensor
+# publishes under "lux", not "bh1750".
+#
+# Of the applications in the node library, three are deliberately absent: "all" is every sensor at
+# once and no order helps, "gsheets" carries only a logging control, and "lcd_sht" displays another
+# node's readings rather than its own.
+
+agri:
+  front:    [soil/soil, ds18b20/ds18b20, sht/temperature, sht/humidity, controlhysteresis]
+  summary:  [soil/soil, ds18b20/ds18b20]
+bh1750:
+  front:    [lux/lux, controlhysteresis]
+blinken:
+  front:    [controlblinken]
+commonground:
+  front:    [bme280/temperature, bme280/humidity, do/do, ultrasonic/ultrasonic, ds18b20/ds18b20, controlhysteresis]
+datalogger:
+  front:    [sht/temperature, sht/humidity]
+ensaht:
+  front:    [aht21/temperature, aht21/humidity, ens160/aqi, controlhysteresis]
+gps:
+  front:    [gps/satellites, gps/latitude, gps/longitude, gps/altitude]
+  summary:  [gps/satellites]
+lilygohigrow:
+  front:    [soil/soil, dht/temperature, dht/humidity, lux/lux]
+  summary:  [soil/soil]
+loadcell:
+  front:    [loadcell/loadcell]
+loramesher:
+  front:    [sht/temperature, sht/humidity]
+ms5803:
+  front:    [ms5803/pressure, ms5803/temperature]
+power:
+  front:    [sht/temperature, sht/humidity, controlblinken]
+remotedisplay:
+  front:    [sht/temperature, sht/humidity, controlhysteresis]
+sht30:
+  front:    [sht/temperature, sht/humidity, controlhysteresis]
+soil:
+  front:    [soil/soil, sht/temperature, sht/humidity, controlhysteresis]
+  summary:  [soil/soil]
+sonoff:
+  # The relay is what someone wants to see; the control that drives it comes second.
+  front:    [relay/on, controlhysteresis]
+temp:
+  front:    [aht20/temperature, bmp280/pressure, controlhysteresis]
