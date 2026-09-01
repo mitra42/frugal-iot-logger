@@ -11,6 +11,8 @@ import async from 'async'; // https://caolan.github.io/async/v3/docs.html
 import yaml from 'js-yaml'; // https://www.npmjs.com/package/js-yaml
 import { appendFile, appendFileSync, mkdir, mkdirSync, readFile, readdir } from "fs"; // https://nodejs.org/api/fs.html
 import mqtt from 'mqtt'; // https://www.npmjs.com/package/mqtt
+import nodepath from 'path'; // https://nodejs.org/api/path.html - "nodepath" because several
+                             // functions here have a local variable called "path"
 import admin from 'firebase-admin'; // Firebase Admin SDK
 //import tospliced from 'array.prototype.tospliced'; // tospliced only in Node > 20 (and webstorm currently 18)
 
@@ -29,11 +31,26 @@ const legacymodules = ["blinken_out","messages", "now"];
 // server keeps behaving as it did. Set from the config in MqttLogger.start().
 let verbose = true;
 
+// Where readings are written. "data" until MqttLogger.start() reads config.server.datadir, the
+// same setting the server serves /data from - so setting it moves both ends together. Absent means
+// "data", relative to the working directory, which is what this did when it was written inline.
+// Set from the config in MqttLogger.start(), like verbose and flushSeconds above.
+let dataDir = 'data';
+
 // =========== Some generic helper functions, not specific to this client ========
-// Clean any leading "/" or "../" from a string so it can be safely appended to a path
-function sanitizeUrl(t) {
-  if(t && t[0] === '/') { return sanitizeUrl(t.substring(1)); }
-  return (t.replaceAll("../",""));
+// Where a topic's readings belong, or null if that topic would put them outside dataDir.
+//
+// Resolve the whole path and then check where it landed. What this replaces (sanitizeUrl) stripped
+// a leading "/" and then removed "../" from the topic in a single pass, which is not the same
+// thing: one pass over "....//" removes the "../" it contains and leaves "../" behind, so the
+// sequence survives being sanitised. Topics arrive from the broker, so whoever holds an
+// organization's credentials - which is every node and every logged-in browser - chooses them.
+function topicToDir(topic) {
+  const root = nodepath.resolve(dataDir);
+  // path.join with a leading "." so an absolute topic ("/etc/x") is treated as relative, the way
+  // the old leading-"/" strip did.
+  const wanted = nodepath.resolve(root, nodepath.join('.', String(topic || '')));
+  return ((wanted !== root) && wanted.startsWith(root + nodepath.sep)) ? wanted : null;
 }
 // A place to put a breakpoint
 function XXX(args) {
@@ -576,9 +593,14 @@ class MqttOrganization {
       }
   }
   log(date, topic, message) {
-    let path = `data/${sanitizeUrl(topic)}`;
+    const dir = topicToDir(topic);
+    if (!dir) {
+      // Nothing legitimate produces one of these, so say so rather than dropping it quietly.
+      console.error("Not logging topic - it resolves outside", dataDir, ":", topic);
+      return;
+    }
     let filename = `${date.toISOString().substring(0, 10)}.csv`
-    this.appendPathFile(path, filename, `${date.valueOf()},"${message}"\n`);
+    this.appendPathFile(dir, filename, `${date.valueOf()},"${message}"\n`);
   }
   appendPathFile(path, filename, message) {
     appendPending(path, filename, message);
@@ -1415,6 +1437,9 @@ class MqttLogger {
     // Absent means 0, writing each reading as it arrives, so an existing server is not silently
     // given a window in which a power cut would lose readings.
     startFlushing(clog.flushseconds);
+    // The same directory the server serves /data from, so the two cannot drift apart. Absent - a
+    // standalone logger with no config.d/server.yaml - keeps the "data" this used to hard-code.
+    dataDir = (this.config.server && this.config.server.datadir) || 'data';
     this.catchSignals();
     // noinspection JSUnresolvedReference
     for (let [oid, oconfig] of Object.entries(this.config.organizations)) {
