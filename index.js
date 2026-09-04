@@ -261,7 +261,9 @@ function startFlushing(seconds) {
 class MqttOrganization {
   constructor(id, config_org, config_mqtt, config_schema) {
     this.id = id;
-    this.config_org = config_org; // Config structure currently: { name, mqtt_password, projects: { id: { topics: { temperature , humidity }
+    // Config structure currently: { name, mqtt_password, logger_userid, logger_password,
+    // projects: { id: { topics: { temperature, humidity } } } }
+    this.config_org = config_org;
     this.config_mqtt = config_mqtt; // { broker }
     this.config_schema = config_schema; // { topics, modules }
     this.mqtt_client = null; // Object from library
@@ -289,8 +291,16 @@ class MqttOrganization {
       this.mqtt_client = mqtt.connect(this.config_mqtt.broker, {
         // Options documented at https://www.npmjs.com/package/mqtt#Client
         connectTimeout: 5000,
-        username: this.config_org.userid || this.id,
-        password: this.config_org.mqtt_password,
+        // logger_userid/logger_password are the logger's OWN broker account, put into the config in
+        // memory by the server at startup (see syncLoggers in frugal-iot-server). It can read the
+        // whole organization and publish only "set/" topics, so it can still send the platform
+        // API's device commands and can no longer invent a sensor reading.
+        //
+        // Falling back to the organization's shared credential covers a server too old to supply
+        // one, and a broker with no dynamic-security plugin, where that shared account is still how
+        // everything connects.
+        username: this.config_org.logger_userid || this.config_org.userid || this.id,
+        password: this.config_org.logger_password || this.config_org.mqtt_password,
       });
       this.mqtt_client.on("connect", () => {
         this.mqtt_status_set('connect');
