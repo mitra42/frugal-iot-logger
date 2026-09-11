@@ -60,6 +60,19 @@ function significantlyDifferent(value, lv, significantvalue) {
 }
 
 function isDuplicate(date, topic, value, rules, lastdate, lastvalue) {
+  // A reading going invalid, or coming back, is always worth recording - and the arithmetic
+  // below cannot express it. Math.abs(null - lv) silently evaluates to |lv|, and every
+  // comparison against NaN is false, so a significantvalue rule would otherwise either always
+  // or never fire on an invalid reading. Repeats of an already-invalid reading are suppressed
+  // like any other duplicate.
+  const nowInvalid = (value === null);
+  const wasInvalid = (lastvalue === null);
+  if (nowInvalid || wasInvalid) {
+    // Duplicate only if it was already invalid and still is. Note lastvalue is undefined before
+    // anything has been logged, which is deliberately NOT wasInvalid - the first reading of a
+    // sensor that starts out broken still needs recording.
+    return nowInvalid && wasInvalid;
+  }
   if (rules) {
     let ld = lastdate || 0;
     let lv = lastvalue || 0;
@@ -78,11 +91,16 @@ function valueFromText(message, type) {
       if (message === "false") return 0;
       return Number(message); // Message "0" or "1" and want to store number anyway
     case "exponential":
-      return Number(message);
     case "float":
-      return Number(message);
-    case "int":
-      return Number(message);
+    case "int": {
+      // "nan" is Frugal-IoT's on-the-wire form for "this sensor currently has no reading" - a
+      // failed read, an absent device, a validate() that rejected the value. See "Invalid
+      // readings" in the node library's CLAUDE.md. Return null rather than NaN so that the
+      // comparisons downstream (isDuplicate, significantlyDifferent) can actually test for it -
+      // every comparison against NaN is false, which makes it invisible to them.
+      const n = Number(message);
+      return Number.isNaN(n) ? null : n;
+    }
     case "topic":
       return message;
     case "text":
