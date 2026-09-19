@@ -20,11 +20,89 @@ aht21:
   topics:
     - leaf: temperature
     - leaf: humidity
+# The DS18B20 probes on an FF-OpenMPPT board - see frugal-iot-irrigation. Separate modules rather
+# than one, because the three measure quite different things and want different ranges; the class
+# is the same Sensor_DS18B20 as the `ds18b20` module below.
+airtemp:
+  name: Air Temperature
+  topics:
+    - leaf: airtemp
+      leaf_from: temperature
+      name: Air Temperature
+      min: -20
+      max: 60
+analog:
+  name: "Analog Out"
+  topics:
+    - leaf: volts
 battery:
   name: "Battery"
   insidefrugaliot: true
   topics:
     - leaf:   battery
+# How much of its rated capacity the battery still has, inferred from an overnight discharge.
+# A trend over weeks, not a reading; see control_health.h. Named batteryhealth because `health` is
+# already taken by the device's own reporting.
+batteryhealth:
+  name: Battery Health
+  topics:
+    - leaf: health
+      leaf_from: percent
+      name: Health
+      duplicates:
+        significantdate: 86400000
+        significantvalue: 1
+    - leaf: state
+      leaf_from: controltext
+      name: State
+      rw: r
+    - leaf: soc
+      leaf_from: controlfloat
+      name: Charge
+      min: 0
+      max: 100
+    - leaf: capacity
+      leaf_from: controlfloat
+      name: Capacity Ah
+      min: 0
+      max: 500
+      wireable: false
+    - leaf: load
+      leaf_from: controlfloat
+      name: Average load A
+      min: 0
+      max: 50
+      wireable: false
+    - leaf: active
+      leaf_from: controlint
+      name: Irrigation active
+      min: 0
+      max: 16
+    - leaf: panelwatts
+      leaf_from: controlfloat
+      name: Panel watts
+      min: 0
+      max: 2000
+      wireable: false
+    - leaf: storageratio
+      leaf_from: controlfloat
+      name: Storage ratio
+      min: 0
+      max: 50
+      rw: r
+      wireable: false
+    - leaf: advice
+      leaf_from: controltext
+      name: Advice
+      rw: r
+batttemp:
+  name: Battery Temperature
+  topics:
+    - leaf: batttemp
+      leaf_from: temperature
+      name: Battery Temperature
+      min: -20
+      max: 60
 bme280:
   name: "BME280"
   topics:
@@ -131,11 +209,11 @@ ens160:
       leaf_from: controlfloat
       name: Temperature
       max:  50
-      color: red
+      color: "#ff0000"
     - leaf: humidity
       leaf_from: controlfloat
       name: Humidity
-      color: blue
+      color: "#0000ff"
     - leaf: aqi
     - leaf: tvoc
     - leaf: eco2
@@ -177,6 +255,16 @@ health:
   topics:
     - leaf:     wifibars
     - leaf:     wifissid
+# The charge controller's own heatsink. Either a DS18B20 or a pair of diodes read on an ADC pin,
+# depending on the board - the reading means the same either way.
+heatsink:
+  name: Heatsink Temperature
+  topics:
+    - leaf: heatsink
+      leaf_from: temperature
+      name: Heatsink Temperature
+      min: 0
+      max: 120
 ht:
   name: HT
   topics:
@@ -190,11 +278,64 @@ ina219:
     - leaf: current
     - leaf: power
     - leaf: load
+irrigation:
+  name: Irrigation
+  topics:
+    - leaf: hour
+      leaf_from: controlint
+      name: Start hour
+      min: 0
+      max: 23
+    - leaf: minute
+      leaf_from: controlint
+      name: Start minute
+      min: 0
+      max: 59
+    - leaf: maxminutes
+      leaf_from: controlfloat
+      name: Max minutes per sector
+      min: 0
+      max: 120
+    - leaf: enabled
+      leaf_from: controlintoggle
+      name: Enabled
+    - leaf: tank
+      leaf_from: controlfloat
+      name: Tank level
+      color: "#0000ff"
+    - leaf: tankstart
+      leaf_from: controlfloat
+      name: Tank level to start
+    - leaf: tankempty
+      leaf_from: controlfloat
+      name: Tank level to stop
+    - leaf: power
+      leaf_from: controlintoggle
+      name: Power ok
+      wireable: true
+    - leaf: solar
+      leaf_from: controlintoggle
+      name: Input power
+      wireable: true
+    - leaf: pump
+      leaf_from: controlouttoggle
+      name: Pump
+    - leaf: active
+      leaf_from: controlint
+      name: Active sector
+      min: 0
+      max: 16
 lcd:
   summary: false   # a message is not a reading
   name: LCD
   topics:
     - leaf: message
+# The switched load output - OSPIT's pin 14 in its "load" role, opened by the low-voltage
+# disconnect. An Actuator_Digital, so the same shape as `relay`.
+load:
+  name: Load
+  topics:
+    - leaf:     on
 ledbuiltin:
   name: LED
   slot: ledbuiltin
@@ -211,6 +352,96 @@ lux:
   name: Light meter
   topics:
     - leaf:     lux
+# Solar charge control - see frugal-iot-irrigation. `step` is the raw DAC value because that is
+# unambiguous; `vmpp` is what the node PREDICTS that step asks the hardware for, which is a guess
+# until it has been checked against a meter.
+mppt:
+  name: Charge Control
+  topics:
+    - leaf: automatic
+      leaf_from: controlintoggle
+      name: Automatic
+    - leaf: state
+      leaf_from: controltext
+      name: State
+      rw: r
+    - leaf: profile
+      leaf_from: controlint
+      name: Battery type
+      min: 0
+      max: 3
+      wireable: false
+    - leaf: chargeend
+      leaf_from: controlfloat
+      name: Charge end
+      min: 10000
+      max: 16000
+      wireable: false
+    - leaf: tempcoeff
+      leaf_from: controlfloat
+      name: Temp coefficient
+      min: 0
+      max: 60
+      wireable: false
+    - leaf: hotcharge
+      leaf_from: controlfloat
+      name: Hot battery
+      min: 10000
+      max: 16000
+      wireable: false
+    - leaf: batttemp
+      leaf_from: controlfloat
+      name: Battery temp
+      min: -20
+      max: 60
+    - leaf: heatsink
+      leaf_from: controlfloat
+      name: Heatsink temp
+      min: 0
+      max: 120
+    - leaf: target
+      leaf_from: controlfloat
+      name: Target
+      min: 10000
+      max: 16000
+      rw: r
+      wireable: false
+    - leaf: step
+      leaf_from: controlint
+      name: DAC step
+      min: 0
+      max: 255
+      wireable: false
+    - leaf: panel
+      leaf_from: controlfloat
+      name: Panel
+      min: 0
+      max: 30000
+    - leaf: battery
+      leaf_from: controlfloat
+      name: Battery
+      min: 0
+      max: 16000
+    - leaf: voc
+      leaf_from: controlfloat
+      name: Open circuit
+      min: 0
+      max: 30000
+      rw: r
+      wireable: false
+    - leaf: vmpp
+      leaf_from: controlfloat
+      name: Panel target
+      min: 0
+      max: 30
+      rw: r
+      wireable: false
+    - leaf: dacvolts
+      leaf_from: controlfloat
+      name: DAC volts
+      min: 0
+      max: 3.3
+      rw: r
 ms5803:
   name: MS5803
   topics:
@@ -221,6 +452,25 @@ ota:
   insidefrugaliot: true
   topics:
     - leaf:     key
+panel:
+  name: Solar Panel
+  topics:
+    - leaf: panel
+      leaf_from: voltage
+      name: Panel Voltage
+      max: 30000
+pcbtemp:
+  name: Board Temperature
+  topics:
+    - leaf: pcbtemp
+      leaf_from: temperature
+      name: Board Temperature
+      min: -20
+      max: 100
+pump:
+  name: Pump
+  topics:
+    - leaf:     on
 rain:
   name: Rain
   topics:
@@ -230,16 +480,93 @@ relay:
   name: Relay
   topics:
     - leaf:     on
+# One sector of an irrigation run - see modules "irrigation". A node with several sectors publishes
+# sector1, sector2... and the client resolves those numbered instances back to this entry, so only
+# the one definition is needed here however many sectors a node has.
+sector:
+  name: Irrigation sector
+  topics:
+    - leaf: moisture
+      leaf_from: controlfloat
+      name: Moisture
+      color: "#a52a2a"
+    - leaf: target
+      leaf_from: controlfloat
+      name: Target
+    - leaf: enable
+      leaf_from: controlintoggle
+      name: Enable
+    - leaf: valve
+      leaf_from: controlouttoggle
+      name: Valve
 sht:
   name: SHT
   topics:
     - leaf: temperature
     - leaf: humidity
+# State of charge, estimated from battery voltage - reporting only, never controlled from. See
+# control_soc.h in frugal-iot-irrigation for what the estimate is and is not worth.
+soc:
+  name: State of Charge
+  topics:
+    - leaf: soc
+      leaf_from: percent
+      name: Charge
+      duplicates:
+        significantdate: 900000
+        significantvalue: 1
+    - leaf: charging
+      leaf_from: controlouttoggle
+      name: Charging
+    - leaf: battery
+      leaf_from: controlfloat
+      name: Battery
+      min: 0
+      max: 16000
+    - leaf: panel
+      leaf_from: controlfloat
+      name: Panel
+      min: 0
+      max: 30000
+    - leaf: profile
+      leaf_from: controlint
+      name: Battery type
+      min: 0
+      max: 3
+      wireable: false
 soil:
   name: Soil
   topics:
     - leaf: soil
+tank:
+  name: Water Tank
+  topics:
+    - leaf: tank
+soilmodbus:
+  name: "Soil Probe"
+  topics:
+    # Reuses the shared humidity and temperature definitions - same ranges, logging and
+    # duplicate rules - overriding only what soil makes different from air.
+    - leaf: humidity
+      name: "Soil Moisture"
+      color: brown
+      units: "%"      # Volumetric water content, not the relative humidity the shared leaf means
+    - leaf: temperature
+      name: "Soil Temperature"
+      color: brown
 ultrasonic:
   name: "Ultrasonic Distance"
   topics:
     - leaf: ultrasonic
+# The irrigation valves - Actuator_Digital instances, so the same shape as `relay`. A node with
+# several publishes valve1, valve2... which the client resolves back to this entry.
+# A switched USB supply - an Actuator_Digital, so the same shape as `relay`. On the FF board this
+# shares a pin with the third irrigation valve; a node has one or the other.
+usb:
+  name: USB Supply
+  topics:
+    - leaf:     on
+valve:
+  name: Valve
+  topics:
+    - leaf:     on

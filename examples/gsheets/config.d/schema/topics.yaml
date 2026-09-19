@@ -41,7 +41,7 @@ altitude:
   min:      -500
   max:      9000
   width:    6
-  color:    black
+  color:    "#000000"
   log:      true
   duplicates:
     significantdate: 900000
@@ -67,7 +67,7 @@ aqi:
   display:  bar
   min:      0
   max:      5
-  color:    purple
+  color:    "#800080"
   rw:       r
   graphable:  true
   log:      true
@@ -81,7 +81,7 @@ aqi500:
   display:  bar
   min:      0
   max:      500
-  color:    brown
+  color:    "#a52a2a"
   rw:       r
   graphable:  true
   log:      true
@@ -95,7 +95,7 @@ battery:
   display:  text
   min:      3000
   max:      5000
-  color:    green
+  color:    "#008000"
   rw:       r
   graphable:  true
   log:      true
@@ -120,7 +120,7 @@ bus:
   min:      0
   max:      32
   width:    5
-  color:    green
+  color:    "#008000"
   rw:       r
   log:      true
   units:    V
@@ -134,7 +134,7 @@ button:
   type:     bool
   log:      true
   display:  toggle
-  color:    black
+  color:    "#000000"
   rw:       r
   # A press changes the value, so it is still recorded - this only drops the repeats in between
   duplicates:
@@ -155,7 +155,7 @@ controlfloat:
   type:     float
   log:      false
   display:  text
-  color:    black
+  color:    "#000000"
   wireable: true
   rw:       w
   retain:   true
@@ -166,7 +166,7 @@ controlint:
   type:     int
   log:      false
   display:  text
-  color:    black
+  color:    "#000000"
   wireable: true
   rw:       w
   retain:   true
@@ -177,7 +177,7 @@ controltext:
   type:     text
   log:      false
   display:  text
-  color:    black
+  color:    "#000000"
   wireable: true
   rw:       w
   retain:   true
@@ -186,7 +186,7 @@ controlintoggle:
   type:     bool
   log:      false
   display:  toggle
-  color:    black
+  color:    "#000000"
   rw:       w
   wireable: false
 controlouttoggle:
@@ -194,7 +194,7 @@ controlouttoggle:
   type:     bool
   log:      true
   display:  toggle
-  color:    black
+  color:    "#000000"
   rw:       r
   wireable: true
   # Read-only bool, so logged by default - match the "out" and "on" topics it stands in for
@@ -209,7 +209,7 @@ course:
   min:      0
   max:      360
   width:    5
-  color:    black
+  color:    "#000000"
   log:      true
   duplicates:
     significantdate: 900000
@@ -225,7 +225,7 @@ current:
   min:      -3200
   max:      3200
   width:    7
-  color:    red
+  color:    "#ff0000"
   rw:       r
   log:      true
   units:    mA
@@ -250,7 +250,7 @@ do:
   min:      0
   max:      20
   width:    5
-  color:    blue
+  color:    "#0000ff"
   rw:       r
   log:      true
   units:    mg/L
@@ -265,7 +265,7 @@ eco2:
   display:  bar
   min:      300
   max:      900
-  color:    brown
+  color:    "#a52a2a"
   log:      true
   units:    ppm
   duplicates:
@@ -281,7 +281,7 @@ gas:
   min:      0
   max:      500
   width:    5
-  color:    green
+  color:    "#008000"
   rw:       r
   log:      true
   units:    kOhm
@@ -297,7 +297,7 @@ hdop:
   min:      0
   max:      50
   width:    5
-  color:    black
+  color:    "#000000"
   log:      false
   duplicates:
     significantdate: 900000
@@ -312,7 +312,7 @@ humidity:
   min:      0
   max:      100
   width:    5
-  color:    blue
+  color:    "#0000ff"
   log:      true
   duplicates:
     significantdate: 900000
@@ -341,7 +341,7 @@ language_code:
   type:     text
   log:      false
   display:  text
-  color:    black
+  color:    "#000000"
   rw:       r
 lastseen:
   leaf:     lastseen
@@ -359,7 +359,7 @@ latitude:
   min:      -90
   max:      +90
   width:    9
-  color:    black
+  color:    "#000000"
   log:      true
   duplicates:
     significantdate: 900000
@@ -375,7 +375,7 @@ load:
   min:      0
   max:      32
   width:    5
-  color:    green
+  color:    "#008000"
   rw:       r
   log:      true
   units:    V
@@ -391,7 +391,7 @@ loadcell:
   min:      0
   max:      65000
   width:    7
-  color:    yellow
+  color:    "#b8860b"
   log:      true
   duplicates:
     significantdate: 900000
@@ -407,7 +407,7 @@ longitude:
   min:      -180
   max:      +180
   width:    10
-  color:    black
+  color:    "#000000"
   log:      true
   duplicates:
     significantdate: 900000
@@ -423,7 +423,7 @@ lux:
   min:      0
   max:      65000
   width:    5
-  color:    yellow
+  color:    "#b8860b"
   log:      true
   rw:       r
   duplicates:
@@ -436,7 +436,7 @@ manual:
   name:     Manual
   type:     bool
   display:  toggle
-  color:    black
+  color:    "#000000"
   rw:       r
   log:      true
   graphable:  true
@@ -452,7 +452,7 @@ message:
   type:     text
   log:      false
   display:  text
-  color:    black
+  color:    "#000000"
   wireable: true
   rw:       w
   retain:   true
@@ -464,7 +464,7 @@ mm:
   min:      0
   max:      500
   width:    5
-  color:    blue
+  color:    "#0000ff"
   rw:       r
   log:      true
   duplicates:
@@ -486,7 +486,7 @@ on:
   name:     On
   type:     bool
   display:  toggle
-  color:    black
+  color:    "#000000"
   rw:       w
   log:      true
   duplicates:
@@ -498,7 +498,7 @@ out:
   name:     Out
   type:     bool
   display:  toggle
-  color:    black
+  color:    "#000000"
   rw:       r
   log:      true
   wireable: true
@@ -506,13 +506,33 @@ out:
   duplicates:
     significantdate: 900000
     significantvalue: 1
+percent:
+  # A 0-100% figure that is worth recording and graphing - state of charge, battery health. Unlike
+  # controlfloat it is read-only and logged, so it needs its own duplicate rule; [name] and the
+  # duplicate thresholds should be overridden per module.
+  leaf:     percent
+  name:     Percent
+  type:     float
+  display:  bar
+  min:      0
+  max:      100
+  width:    3
+  color:    "#008000"
+  rw:       r
+  wireable: false
+  log:      true
+  duplicates:
+    significantdate: 900000
+    significantvalue: 1
+  graphable:  true
+  units:    "%"
 position:
   leaf:     position
   name:     Position
   type:     text
   log:      false
   display:  text
-  color:    black
+  color:    "#000000"
   rw:       r
 power:
   leaf:     power
@@ -522,7 +542,7 @@ power:
   min:      0
   max:      100000
   width:    8
-  color:    orange
+  color:    "#ffa500"
   rw:       r
   log:      true
   units:    mW
@@ -539,7 +559,7 @@ pressure:
   max:      1100
   width:    6
   units:    hPa
-  color:    blue
+  color:    "#0000ff"
   rw:       r
   log:      true
   duplicates:
@@ -554,7 +574,7 @@ rain:
   min:      0
   max:      500
   width:    5
-  color:    blue
+  color:    "#0000ff"
   rw:       r
   log:      true
   duplicates:
@@ -570,7 +590,7 @@ satellites:
   min:      0
   max:      32
   width:    2
-  color:    black
+  color:    "#000000"
   log:      false
   duplicates:
     significantdate: 900000
@@ -585,7 +605,7 @@ select:
   log:      false
   min:      0
   display:  text
-  color:    black
+  color:    "#000000"
   wireable: false
   rw:       w
   retain:   true
@@ -597,7 +617,7 @@ shunt:
   min:      -320
   max:      320
   width:    6
-  color:    blue
+  color:    "#0000ff"
   rw:       r
   log:      true
   units:    mV
@@ -613,7 +633,7 @@ speed:
   min:      0
   max:      999
   width:    5
-  color:    black
+  color:    "#000000"
   log:      true
   duplicates:
     significantdate: 900000
@@ -628,7 +648,7 @@ soil:
   display:  bar
   min:      0
   max:      100
-  color:    brown
+  color:    "#a52a2a"
   rw:       r
   log:      true
   duplicates:
@@ -636,6 +656,22 @@ soil:
     significantvalue: 1
   graphable:  true
   calibrate:  true
+  units:    "%"
+tank:
+  leaf:     tank
+  name:     Water Tank
+  type:     float
+  display:  bar
+  min:      0
+  max:      100
+  width:    5
+  color:    "#0000ff"
+  rw:       r
+  log:      true
+  duplicates:
+    significantdate: 900000
+    significantvalue: 1
+  graphable:  true
   units:    "%"
 temperature:
   leaf:     temperature
@@ -646,7 +682,7 @@ temperature:
   min:      0
   max:      50
   width:    4
-  color:    red
+  color:    "#ff0000"
   wireable: false
   log:      true
   units:    Cel
@@ -663,7 +699,7 @@ timeoff:
   type:     float
   log:      false
   display:  text
-  color:    black
+  color:    "#000000"
   rw:       w
   wireable: true
   units:    s
@@ -676,7 +712,7 @@ timeon:
   type:     float
   log:      false
   display:  text
-  color:    black
+  color:    "#000000"
   rw:       w
   wireable: true
   units:    s
@@ -687,7 +723,7 @@ tvoc:
   display:  bar
   min:      0
   max:      99
-  color:    green
+  color:    "#008000"
   rw:       r
   log:      true
   units:    ppb
@@ -703,7 +739,7 @@ ultrasonic:
   min:      0
   max:      7500
   width:    4
-  color:    blue
+  color:    "#0000ff"
   rw:       r
   log:      true
   units:    mm
@@ -718,8 +754,43 @@ utc_time:
   type:     text
   log:      false
   display:  text
-  color:    black
+  color:    "#000000"
   rw:       r
+voltage:
+  # A DC voltage read through a resistor divider - see Sensor_Voltage in the library. Millivolts,
+  # like `battery`, but without that topic's single-lithium-cell range or its special-casing in
+  # the UX. [name, min, max] should be overridden per module.
+  leaf:     voltage
+  name:     Voltage
+  type:     int
+  display:  text
+  min:      0
+  max:      30000
+  color:    "#800080"
+  rw:       r
+  graphable:  true
+  log:      true
+  units:    mV
+  duplicates:
+    significantdate: 900000
+    significantvalue: 100
+volts:
+  leaf:     volts
+  name:     Volts
+  type:     float
+  display:  slider
+  rw:       w
+  min:      0
+  max:      3.3
+  width:    4
+  color:    "#800080"
+  units:    V
+  wireable: true
+  log:      true
+  duplicates:
+    significantdate: 900000
+    significantvalue: 0.05
+  graphable:  true
 wifibars:
   leaf:     wifibars
   name:     WiFi
@@ -728,7 +799,7 @@ wifibars:
   display:  text
   min:      0
   max:      4
-  color:    blue
+  color:    "#0000ff"
   rw:       r
   # Logged, because an int that is read-only is logged unless told otherwise. Only 5 values, so
   # any change is worth recording and nothing else is
@@ -741,5 +812,5 @@ wifissid:
   type:     text
   log:      false
   display:  text
-  color:    blue
+  color:    "#0000ff"
   rw:       r
