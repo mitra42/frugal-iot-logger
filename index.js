@@ -128,7 +128,7 @@ function valueFromText(message, type) {
       // noinspection JSUnusedGlobalSymbols
       return yaml.load(message, {onWarning: (warn) => console.log('Yaml warning:', warn)});
     default:
-      XXX(`Unrecognized message type: ${type}`);
+      XXX(`Unrecognized message type: ${type} in ${message}`);
       return undefined;
   }
 }
@@ -399,8 +399,46 @@ class MqttOrganization {
     this.subscriptions.filter(s => s.matches(topic)).forEach(s => s.dispatch(topic, message));
   }
 
+   /* Resolve a module id to its entry in the modules schema.
+    *
+    * An exact match wins. Failing that, a numbered or suffixed INSTANCE falls back to its base
+    * module: a node with several probes or irrigation sectors publishes `soil1`, `sector1`... and
+    * modules.yaml carries only the one `soil`/`sector` entry. Without this, sector1/moisture found
+    * no module and no topic of its own, so findMostGranular returned undefined for every field -
+    * valueFromText had no type to convert with, and nothing was logged.
+    * NOTE same rule in frugal-iot-client core.js moduleBaseId() - if change here, change there.
+    *
+    * The suffix must be all digits (`soil1`) or start with a separator (`soil_north`, `soil-2`).
+    * A bare-word suffix is NOT accepted, so a module genuinely called `door` does not silently
+    * resolve to the `do` (dissolved oxygen) template. Longest prefix wins, so `soilmodbus1` finds
+    * `soilmodbus` rather than `soil`.
+    */
+   moduleBaseId(module) {
+     const modules = (this.config_schema && this.config_schema.modules) || {};
+     if (modules[module]) return module;
+     let best = null;
+     for (const key of Object.keys(modules)) {
+       if ((module.length > key.length) && module.startsWith(key)
+           && (best === null || key.length > best.length)) {
+         const suffix = module.substring(key.length);
+         if (/^[0-9]+$/.test(suffix) || /^[-_]/.test(suffix)) best = key;
+       }
+     }
+     return best;
+   }
+   // The schema entry for a module, resolving sector1 -> sector etc. Undefined if not in the schema.
+   moduleTemplate(module) {
+     const base = this.moduleBaseId(module);
+     return base ? this.config_schema.modules[base] : undefined;
+   }
+   // The part that distinguishes one instance from another - "1" for sector1, "" for an exact match.
+   moduleInstanceSuffix(module) {
+     const base = this.moduleBaseId(module);
+     return (base && (base !== module)) ? module.substring(base.length).replace(/^[-_]/, '') : '';
+   }
+
    schemaField(module, leaf, field) {
-     let moduleSchema = this.config_schema.modules[module];
+     let moduleSchema = this.moduleTemplate(module); // Resolves sector1 -> sector etc, see moduleBaseId
      let moduleTopicSchema = moduleSchema && moduleSchema.topics.find(t => (t.leaf === leaf));
      let topicLeaf = (moduleTopicSchema && moduleTopicSchema["leaf_from"]) || leaf; // Always exists - at worst, if no module, its leaf directly to topics
      let topicSchema = this.config_schema.topics[topicLeaf];
@@ -420,9 +458,13 @@ class MqttOrganization {
     * @returns {Object} Schema for the module with fields array
     */
    schemaModule(module) {
-     const moduleConfig = this.config_schema.modules[module];
+     const moduleConfig = this.moduleTemplate(module); // Resolves sector1 -> sector etc, see moduleBaseId
+     // An instance resolved by prefix gets its suffix appended, so several sectors read as
+     // "Irrigation sector 1/2/3" rather than repeating one name
+     const suffix = this.moduleInstanceSuffix(module);
+     const baseName = (moduleConfig && moduleConfig.name) || this.moduleBaseId(module) || module;
      const moduleSchema = {
-       name: (moduleConfig && moduleConfig.name) || module,
+       name: suffix ? `${baseName} ${suffix}` : baseName,
        fields: []
      };
 
@@ -439,7 +481,9 @@ class MqttOrganization {
        // Build field schema starting with basic required fields
        const fieldSchema = {
          field: leaf,
-         name: topicDef.name || leaf,
+         // Fall back to the topic's own name, the same way type/rw/units below do - a module that
+         // writes a bare "- leaf: temperature" means the name from topics.yaml, not the leaf id
+         name: topicDef.name || (topicSchema && topicSchema.name) || leaf,
          type: topicDef.type || (topicSchema && topicSchema.type) || 'float',
          rw: topicDef.rw || (topicSchema && topicSchema.rw) || 'r'
        };
@@ -580,6 +624,7 @@ class MqttOrganization {
     // Find most granular type
     let type = this.findMostGranular(topicPathArray, "type", undefined);
     let value = valueFromText(message, type);
+    if (!value) { console.log("XXX topic=",topicPathArray);}
     // Save the current value whether logging or not
     this.currentValue[topicPath] = value;
     // Find most granular rw

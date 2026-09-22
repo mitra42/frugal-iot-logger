@@ -59,5 +59,3 @@ soil:
 sonoff:
   # The relay is what someone wants to see; the control that drives it comes second.
   front:    [relay/on, controlhysteresis]
-temp:
-  front:    [aht20/temperature, bmp280/pressure, controlhysteresis]
