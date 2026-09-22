@@ -523,11 +523,16 @@ soc:
       name: Battery
       min: 0
       max: 16000
+      # controlfloat is "log: false" because most control inputs are wired from a topic that is
+      # already logged in its own right. Battery and panel are not - the node measures and
+      # publishes them here and nowhere else, so without this they were never archived.
+      log: true
     - leaf: panel
       leaf_from: controlfloat
       name: Panel
       min: 0
       max: 30000
+      log: true
     - leaf: profile
       leaf_from: controlint
       name: Battery type
@@ -554,6 +559,16 @@ soilmodbus:
     - leaf: temperature
       name: "Soil Temperature"
       color: brown
+# The node's clock - what time it thinks it is and how far from UTC it displays. Infrastructure
+# rather than a sensor, so it belongs in the Frugal_IoT drop-down alongside ota, and neither leaf is
+# logged. Without this entry both leaves resolved to no schema at all, so every message from them
+# reached valueFromText with no type and was reported as "Unrecognized message type: undefined".
+time:
+  name: Time
+  insidefrugaliot: true
+  topics:
+    - leaf: epoch
+    - leaf: offset
 ultrasonic:
   name: "Ultrasonic Distance"
   topics:

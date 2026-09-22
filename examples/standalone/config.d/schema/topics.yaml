@@ -273,6 +273,18 @@ eco2:
     significantvalue: 5
   rw:       r
   graphable:  true
+# Unix time in seconds, as the node's clock currently reads it - published by the "time" module so
+# the client can see how far a node has drifted. A clock reading rather than a measurement: logging
+# it would fill the CSVs with a number that only ever counts up.
+epoch:
+  leaf:     epoch
+  name:     Epoch
+  type:     int
+  log:      false
+  display:  text
+  color:    "#000000"
+  rw:       r
+  units:    s
 gas:
   leaf:     gas
   name:     Gas Resistance
@@ -481,6 +493,17 @@ name:
   display:  text
   rw:       w
   retain:   true
+# How far the node is displaying from UTC, so it can show local time. Like epoch, a setting the node
+# reports back rather than anything measured, so not logged.
+offset:
+  leaf:     offset
+  name:     UTC Offset
+  type:     int
+  log:      false
+  display:  text
+  color:    "#000000"
+  rw:       r
+  units:    min
 on:
   leaf:     on
   name:     On
