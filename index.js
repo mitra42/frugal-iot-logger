@@ -1536,4 +1536,36 @@ class MqttLogger {
   }
 }
 
-export { MqttLogger, MqttOrganization };
+// Test-only hook. The helpers above are deliberately module-private - nothing outside this file
+// has any business calling them - but test/ needs to exercise them, and the two module-level
+// settings that MqttLogger.start() normally takes from the config need to be settable without
+// standing up a broker. Nothing in the logger itself reads this.
+const _test = {
+  topicToDir,
+  significantlyDifferent,
+  isDuplicate,
+  valueFromText,
+  Subscription,
+  Forwarder,
+  Firebase,
+  Gsheet,
+  appendPending,
+  flushPending,
+  flushPendingSync,
+  startFlushing,
+  // The state MqttLogger.start() would otherwise set, so each test file can put it back to a known
+  // starting point rather than inheriting whatever the previous test left behind.
+  setDataDir: (d) => { dataDir = d; },
+  setVerbose: (v) => { verbose = v; },
+  pendingRows: () => pendingRows,
+  reset: () => {
+    startFlushing(0);
+    pending.clear();
+    pendingRows = 0;
+    knownDirs.clear();
+    flushWaiting = [];
+    flushing = false;
+  },
+};
+
+export { MqttLogger, MqttOrganization, _test };

@@ -10,8 +10,10 @@
 # recorded with no rule about how often. It is the logger that acts on those settings, which is why
 # the check runs here as well as there.
 #
-# Both steps need frugal-iot-server as a sibling checkout, which is how these are developed. Without
-# it they are skipped with a note, rather than failing.
+# The tests run first, and a failure there stops everything else.
+#
+# The two schema steps need frugal-iot-server as a sibling checkout, which is how these are
+# developed. Without it they are skipped with a note, rather than failing.
 
 set -euo pipefail
 
@@ -22,6 +24,12 @@ COPIER="${SERVER}/scripts/copy-schema-to-examples.zsh"
 
 cd "$HERE"
 
+echo "=== Running the tests ==="
+# set -e above, so a failure here stops the rest - nothing below is worth doing if the logger is
+# broken. They need no broker, no Firebase and no network.
+npm test
+
+echo
 echo "=== Bringing the examples' schema up to date from frugal-iot-server ==="
 if [[ ! -f "$COPIER" ]]; then
   echo "  No ${COPIER}, so the examples were left as they are."

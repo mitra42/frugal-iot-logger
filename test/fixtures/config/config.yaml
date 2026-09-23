@@ -1,0 +1,8 @@
+# Minimal config for the config-reader tests. Deliberately small - the point is the merge of
+# config.yaml with config.d/, not a realistic deployment.
+server:
+  port: 8080
+  datadir: test-data
+logger:
+  verbose: false
+  flushseconds: 0

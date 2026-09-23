@@ -55,6 +55,16 @@ To enable Firebase:
 
 **Complete documentation and example:** [examples/firebase/README.md](examples/firebase/README.md)
 
+### Tests
+
+```
+npm test
+```
+
+Uses Node's built-in test runner, so there is nothing extra to install. Nothing in the suite
+touches a broker, Firebase, Google Sheets or the network. See [test/README.md](test/README.md)
+for what is covered.
+
 ### Reporting problems
 
 Complicated issues involving interaction between this repo 

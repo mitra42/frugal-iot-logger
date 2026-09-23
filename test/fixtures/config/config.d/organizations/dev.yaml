@@ -1,0 +1,6 @@
+name: Developers
+userid: dev
+mqtt_password: secret
+projects:
+  lotus:
+    name: Lotus

@@ -23,7 +23,7 @@
   "name": "frugal-iot-logger",
   "repository": "https://github.com/mitra42/frugal-iot-logger",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1",
+    "test": "node --test \"test/*.test.js\"",
     "generate-defaults": "node scripts/generate-defaults.js",
     "prerelease": "zsh scripts/prerelease.zsh"
   },

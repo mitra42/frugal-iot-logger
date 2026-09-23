@@ -1,0 +1,21 @@
+temperature:
+  leaf: temperature
+  name: Temperature
+  type: float
+  units: Cel
+  min: -40
+  max: 125
+  rw: r
+  log: true
+  duplicates:
+    significantdate: 60000
+    significantvalue: 0.5
+humidity:
+  leaf: humidity
+  name: Humidity
+  type: float
+  units: '%'
+  min: 0
+  max: 100
+  rw: r
+  log: true

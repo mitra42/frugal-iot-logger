@@ -56,6 +56,15 @@ frugal-iot-logger/
 │       ├── standalone.js       # Disk logging example
 │       └── config.d/
 ├── scripts/                     # Utility scripts
+├── test/                        # Test suite - see test/README.md
+│   ├── pure.test.js            # valueFromText, isDuplicate, topicToDir...
+│   ├── subscription.test.js    # Topic matching (+, #, exact)
+│   ├── flush.test.js           # Batched writes to disk
+│   ├── organization.test.js    # Schema resolution and shouldLog
+│   ├── logger.test.js          # Config reading, Thing Descriptor, sendAction
+│   ├── forwarder.test.js       # Firebase and Google Sheets
+│   ├── support.js              # Shared schema fixture and helpers
+│   └── fixtures/config/        # A small config.yaml + config.d/ tree
 └── data/                        # Logged CSV data directory
     ├── {org}/
     │   ├── {project}/
@@ -320,6 +329,30 @@ The logger uses **async patterns** for compatibility with various Node.js versio
 - Events for real-time MQTT subscriptions
 
 ## Development Notes
+
+### Running the Tests
+
+```bash
+npm test                              # everything
+node --test test/organization.test.js # one file
+node --test --watch 'test/*.test.js'  # while working on something
+```
+
+Node's built-in runner (`node:test`), so there is nothing to install. Nothing touches a broker,
+Firebase, Google Sheets or the network, and nothing writes outside a temporary directory. A run
+takes under a second, and `npm run prerelease` runs them first.
+
+`index.js` exports a `_test` object alongside `MqttLogger` and `MqttOrganization`. It exists only
+for the tests - it reaches the module-private helpers and lets a test set the two module-level
+settings (`dataDir`, `flushseconds`) that `start()` would otherwise take from the config. Nothing
+outside `test/` should use it.
+
+The tests describe what the logger already does, not what it was specified to do. When changing
+behaviour deliberately, update the test alongside the code; when a test fails unexpectedly, it is
+describing something that used to work. `test/README.md` lists what is covered and what is not.
+
+Adding a sensor type or a schema rule usually means adding a case to the fixture schema in
+`test/support.js` rather than a new schema in a test file.
 
 ### Starting the Logger (Standalone)
 

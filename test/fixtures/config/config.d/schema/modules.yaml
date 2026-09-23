@@ -1,0 +1,5 @@
+sht:
+  name: SHT
+  topics:
+    - leaf: temperature
+    - leaf: humidity
