@@ -155,10 +155,10 @@ class Subscription {
       return this.topic === topic;
     }
   }
-  dispatch(topic, message) {
+  dispatch(topic, message, retained) {
     // Dispatch, duplicate checking done on MqttOrganization.dispatch
     let date = new Date();
-    this.cb(date, topic, message);
+    this.cb(date, topic, message, retained);
   }
 
 }
@@ -338,11 +338,12 @@ class MqttOrganization {
       this.mqtt_client.on('error', (error) => {
         this.mqtt_status_set("Error:" + error.message);
       });
-      this.mqtt_client.on("message", (topic, message) => {
+      this.mqtt_client.on("message", (topic, message, packet) => {
         // message is Buffer
         let msg = message.toString();
-        if (verbose) console.log("Received", topic, " ", msg);
-        this.dispatch(topic, msg);
+        const retained = !!(packet && packet.retain);
+        if (verbose) console.log("Received", topic, " ", msg, retained ? "(retained)" : "");
+        this.dispatch(topic, msg, retained);
       });
     }
   }
@@ -395,8 +396,8 @@ class MqttOrganization {
       this.mqtt_subscribe(sub.topic, sub.qos);
     }
   }
-  dispatch(topic, message) {
-    this.subscriptions.filter(s => s.matches(topic)).forEach(s => s.dispatch(topic, message));
+  dispatch(topic, message, retained) {
+    this.subscriptions.filter(s => s.matches(topic)).forEach(s => s.dispatch(topic, message, retained));
   }
 
    /* Resolve a module id to its entry in the modules schema.
@@ -592,7 +593,7 @@ class MqttOrganization {
     return (found === undefined) ? def : found;
   }
   // Check if should log this message
-  shouldLog(date, topicPath, message) { // note message is string at this point
+  shouldLog(date, topicPath, message, retained) { // note message is string at this point
     // Discard messages too deep (or "set")
     let typesToLog = [ "float", "int", "bool" ]; // By default log these types
     let topicPathArray = topicPath.split('/');  // [ org, project, node, [ set ], module, leaf, [ parm ]
@@ -626,6 +627,19 @@ class MqttOrganization {
     let value = valueFromText(message, type);
     // Save the current value whether logging or not
     this.currentValue[topicPath] = value;
+    /*
+     * A RETAINED delivery is the broker replaying its store because we just subscribed, not a node
+     * reporting - MQTT 3.1.1 clears the flag on deliveries to an established subscription, so this
+     * is exactly the flood that arrives at startup. Logging it wrote a row per topic stamped with
+     * the restart time, for readings that were taken hours or days earlier: a fabricated data point
+     * at a time nothing was measured, and one that looked identical to a real one.
+     *
+     * The value is kept above, so reportNodes and the dashboard still show the node's current
+     * state. Only the time series declines to invent a sample. Same trade as the bridge topics,
+     * which are carried at QoS 0 so an outage leaves a gap rather than a backlog arriving under the
+     * wrong timestamps - a gap is honest, this would not be.
+     */
+    if (retained) return false;
     // Find most granular rw
     let rw = this.findMostGranular(topicPathArray, "rw");
     // Find most granular log - but generic type-specific rule if not found
@@ -648,8 +662,8 @@ class MqttOrganization {
   }
 
   // Setup by configSubscribe
-  messageReceived(date, topicPath, message) {
-    if (this.shouldLog(date, topicPath, message)) {
+  messageReceived(date, topicPath, message, retained) {
+    if (this.shouldLog(date, topicPath, message, retained)) {
       this.log(date, topicPath, message);
     }
       // Send to all Firebase instances if configured - Google sheets doesnt do anything at the per-message level
