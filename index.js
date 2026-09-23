@@ -624,7 +624,6 @@ class MqttOrganization {
     // Find most granular type
     let type = this.findMostGranular(topicPathArray, "type", undefined);
     let value = valueFromText(message, type);
-    if (!value) { console.log("XXX topic=",topicPathArray);}
     // Save the current value whether logging or not
     this.currentValue[topicPath] = value;
     // Find most granular rw
