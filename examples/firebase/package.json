@@ -8,6 +8,6 @@
         "start": "node firebase.js"
     },
     "dependencies": {
-        "frugal-iot-logger": "^2.0.0"
+        "frugal-iot-logger": "^2.0.1"
     }
 }
