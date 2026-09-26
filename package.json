@@ -21,7 +21,10 @@
   "license": "MIT",
   "main": "index.js",
   "name": "frugal-iot-logger",
-  "repository": "https://github.com/mitra42/frugal-iot-logger",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/mitra42/frugal-iot-logger.git"
+  },
   "scripts": {
     "test": "node --test \"test/*.test.js\"",
     "generate-defaults": "node scripts/generate-defaults.js",
