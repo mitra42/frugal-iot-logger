@@ -7,11 +7,18 @@
  * for configurable fields (color, min, max) from the module schemas.
  * It generates a defaults.h file suitable for embedding in the frugal-iot firmware.
  *
- * Usage: node generate-defaults.js [config-path]
+ * Usage: node generate-defaults.js [-q|--quiet] [config-path]
+ *
+ * -q (--quiet) prints nothing unless something is wrong, so it can run from a release script
+ * without burying the one line that matters.
+ *
+ * Rerunning this on an unchanged schema leaves defaults.h byte for byte as it was, and says so -
+ * the file carries no timestamp, precisely so that a release that changed nothing shows up as a
+ * repository with nothing to commit rather than as a one-line diff nobody can interpret.
  */
 
 import { MqttLogger } from '../index.js';
-import { writeFile } from 'fs/promises';
+import { writeFile, readFile } from 'fs/promises';
 import { resolve } from 'path';
 import { fileURLToPath } from 'url';
 
@@ -23,8 +30,16 @@ const __dirname = resolve(__filename, '..');
 const FIELDS_TO_EXTRACT = ['color', 'min', 'max'];
 // Default to ../frugal-iot-server config if it exists, otherwise use ./config
 const DEFAULT_CONFIG_PATH = resolve(__dirname, '../../frugal-iot-server');
-const CONFIG_PATH = process.argv[2] || DEFAULT_CONFIG_PATH;
+const ARGV = process.argv.slice(2);
+const QUIET = ARGV.includes('-q') || ARGV.includes('--quiet');
+const CONFIG_PATH = ARGV.find((a) => !a.startsWith('-')) || DEFAULT_CONFIG_PATH;
 const OUTPUT_FILE = resolve(__dirname, '../defaults.h');
+
+// Progress, as opposed to a problem: silent under -q. Anything wrong goes to console.error, which
+// is never silenced, so a quiet run that prints is a quiet run that found something.
+function say(...args) {
+  if (!QUIET) console.log(...args);
+}
 
 /**
  * Convert field names to valid C macro names
@@ -79,19 +94,30 @@ async function generateDefaults() {
     // Create logger instance (don't start it)
     const logger = new MqttLogger();
 
-    // Read configuration
-    console.log(`Reading configuration from ${CONFIG_PATH}...`);
-    const config = await new Promise((resolve, reject) => {
-      logger.readYamlConfig(CONFIG_PATH, (err, config) => {
-        if (err) {
-          reject(err);
-        } else {
-          resolve(config);
-        }
+    // Read configuration.
+    // readYamlConfig names every file it opens on console.log. That is wanted when the server
+    // starts up and unwanted here, so under -q the logging is muted around the call rather than
+    // changed in index.js, where the server is relying on it. console.error is left alone, so a
+    // failure still has somewhere to go.
+    say(`Reading configuration from ${CONFIG_PATH}...`);
+    const realLog = console.log;
+    if (QUIET) console.log = () => {};
+    let config;
+    try {
+      config = await new Promise((resolve, reject) => {
+        logger.readYamlConfig(CONFIG_PATH, (err, cfg) => {
+          if (err) {
+            reject(err);
+          } else {
+            resolve(cfg);
+          }
+        });
       });
-    });
+    } finally {
+      console.log = realLog;
+    }
 
-    console.log('Configuration loaded successfully');
+    say('Configuration loaded successfully');
 
     // Collect all defines
     const defines = [];
@@ -105,18 +131,18 @@ async function generateDefaults() {
     }
 
     const modules = Object.keys(config.schema.modules);
-    console.log(`Found ${modules.length} modules: ${modules.join(', ')}`);
+    say(`Found ${modules.length} modules: ${modules.join(', ')}`);
 
     // Process each module
     for (const moduleName of modules) {
       const moduleSchema = config.schema.modules[moduleName];
 
       if (!moduleSchema.topics || moduleSchema.topics.length === 0) {
-        console.log(`  Skipping module "${moduleName}" - no topics defined`);
+        say(`  Skipping module "${moduleName}" - no topics defined`);
         continue;
       }
 
-      console.log(`\nProcessing module: ${moduleName}`);
+      say(`\nProcessing module: ${moduleName}`);
 
       // Process each topic in the module
       for (const topicDef of moduleSchema.topics) {
@@ -129,7 +155,7 @@ async function generateDefaults() {
         const macroFieldName = toMacroName(`${moduleName}/${fieldName}`);
         typeInfo[macroFieldName] = fieldType;
 
-        console.log(`  Topic: ${fieldName}`);
+        say(`  Topic: ${fieldName}`);
 
         // Process each field we're extracting (color, min, max, etc.)
         for (const attribute of FIELDS_TO_EXTRACT) {
@@ -147,7 +173,7 @@ async function generateDefaults() {
           if (value !== undefined && value !== null) {
             const define = generateDefine(moduleName, fieldName, attribute, value);
             defines.push(define);
-            console.log(`    ${attribute}: ${define}`);
+            say(`    ${attribute}: ${define}`);
           }
         }
       }
@@ -156,7 +182,6 @@ async function generateDefaults() {
     // Build the header file content
     let headerContent = '// This file is intended to go in src/defaults.h in the frugal-iot repo\n';
     headerContent += '// Auto-generated by generate-defaults.js\n';
-    headerContent += `// Generated: ${new Date().toISOString()}\n`;
     headerContent += '\n';
     headerContent += '#ifndef DEFAULTS_H\n';
     headerContent += '#define DEFAULTS_H\n';
@@ -165,11 +190,16 @@ async function generateDefaults() {
     headerContent += '\n\n';
     headerContent += '#endif // DEFAULTS_H\n';
 
-    // Write to file
-    console.log(`\nWriting ${defines.length} defines to ${OUTPUT_FILE}...`);
-    await writeFile(OUTPUT_FILE, headerContent, 'utf8');
-    console.log(`✓ Successfully wrote to ${OUTPUT_FILE}`);
-    console.log(`\nTip: Copy this file to src/defaults.h in the frugal-iot firmware repository.`);
+    // Only write when the content actually differs, so a release that changed no schema leaves
+    // the checkout clean instead of handing you a file to commit that says the same as before.
+    const existing = await readFile(OUTPUT_FILE, 'utf8').catch(() => null);
+    if (existing === headerContent) {
+      say(`\n${defines.length} defines - ${OUTPUT_FILE} is already up to date`);
+    } else {
+      await writeFile(OUTPUT_FILE, headerContent, 'utf8');
+      say(`\n✓ Wrote ${defines.length} defines to ${OUTPUT_FILE}`);
+      say(`\nTip: Copy this file to src/defaults.h in the frugal-iot firmware repository.`);
+    }
 
   } catch (error) {
     console.error('Error generating defaults:', error);
