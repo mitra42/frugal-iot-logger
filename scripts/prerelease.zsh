@@ -53,19 +53,30 @@ cd "$HERE"
 QARG=()
 (( QUIET )) && QARG=(-q)
 
+# One line out of "node --test", which ends with "i tests 172" / "i pass 172" / "i fail 0".
+# Anything else falls back to saying only that it finished - true, and better than a wrong number.
+test_summary() {
+  local out=$1 pass fail
+  pass=$(print -r -- "$out" | sed -nE 's/^[^0-9A-Za-z]*pass ([0-9]+)[[:space:]]*$/\1/p' | tail -1)
+  fail=$(print -r -- "$out" | sed -nE 's/^[^0-9A-Za-z]*fail ([0-9]+)[[:space:]]*$/\1/p' | tail -1)
+  if [[ -n "$pass" ]]; then
+    print -r -- "${pass} passed, ${fail:-0} failed"
+  else
+    print -r -- "finished"
+  fi
+}
+
 say "=== Running the tests ==="
 # Nothing below is worth doing if the logger is broken. They need no broker, no Firebase and no
-# network. Quiet keeps npm's own noise out of the way but still shows everything on a failure,
-# which is the one time you want all of it.
-if (( QUIET )); then
-  if ! TESTOUT=$(npm test 2>&1); then
-    print -r -- "$TESTOUT"
-    print -u2 "npm test failed in ${HERE}"
-    exit 1
-  fi
-else
-  npm test                            # set -e above, so a failure here stops the rest
+# network. The output is a few hundred lines when everything is fine, which nobody reads and so
+# nobody would spot a failure in - so it is a count here, and the whole thing on a failure, which
+# is the one time you want all of it.
+if ! TESTOUT=$(npm test 2>&1); then
+  print -r -- "$TESTOUT"
+  print -u2 "npm test failed in ${HERE}"
+  exit 1
 fi
+say "  $(test_summary "$TESTOUT")"
 
 say
 say "=== Bringing the examples' schema up to date from frugal-iot-server ==="
