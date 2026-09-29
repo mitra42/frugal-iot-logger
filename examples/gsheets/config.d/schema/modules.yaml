@@ -249,6 +249,21 @@ gps:
     - leaf:     hdop
     - leaf:     position
     - leaf:     utc_time
+# HC-SR04 ultrasonic module, timed trigger/echo - Sensor_HCSR04. The distance is the same shape
+# as the Modbus `ultrasonic` module's, but the module is only rated to 4m. The temperature is a
+# compensation input for the speed of sound, not a reading - so controlfloat, as for ens160.
+hcsr04:
+  name: "HC-SR04 Distance"
+  topics:
+    - leaf: hcsr04
+      leaf_from: ultrasonic
+      max:  4000
+    - leaf: temperature
+      leaf_from: controlfloat
+      name: Air Temperature
+      min:  -20
+      max:  50
+      color: "#ff0000"
 health:
   name: System
   insidefrugaliot: true
