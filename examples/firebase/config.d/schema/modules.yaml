@@ -136,6 +136,109 @@ carousel:
   name: Display carousel
   topics:
     - leaf:     select
+# The lcd_ht example's control - formats another node's temperature and humidity for an LCD.
+# Its inputs are wired to the remote node, its output to this node's lcd/message.
+control_lcd_ht:
+  summary: false   # its readings are another node's, shown on that node's card
+  name: LCD SHT
+  topics:
+    - leaf: temperature
+      leaf_from: controlfloat
+      name: Temperature
+      min: -40
+      max: 85
+      color: "#ff0000"
+    - leaf: humidity
+      leaf_from: controlfloat
+      name: Humidity
+      color: "#0000ff"
+    - leaf: message
+      leaf_from: controltext
+      name: Message
+      rw: r
+# The OLED display controls. Each input is wired to whatever reading it should show, often another
+# node's, so like the LCD they stay off the summary. Ranges and colours match the firmware.
+# control_oled_gps is in the gps example.
+control_oled_gps:
+  summary: false   # a display, not a reading
+  name: OLED GPS
+  topics:
+    - leaf: latitude
+      leaf_from: controlfloat
+      name: Latitude
+      min: -90
+      max: 90
+      width: 10
+      color: "#0000ff"
+    - leaf: longitude
+      leaf_from: controlfloat
+      name: Longitude
+      min: -180
+      max: 180
+      width: 11
+      color: "#0000ff"
+    - leaf: altitude
+      leaf_from: controlfloat
+      name: Altitude
+      min: -500
+      max: 9000
+      width: 6
+      color: "#008000"
+    - leaf: speed
+      leaf_from: controlfloat
+      name: Speed
+      max: 999
+      color: "#ffa500"
+    - leaf: course
+      leaf_from: controlfloat
+      name: Course
+      max: 360
+    - leaf: satellites
+      leaf_from: controlfloat
+      name: Satellites
+      max: 32
+    - leaf: hdop
+      leaf_from: controlfloat
+      name: HDOP
+      max: 50
+# In the sht, loramesher and remotedisplay examples, and in frugal-iot-demo
+control_oled_ht:
+  summary: false   # a display, not a reading
+  name: OLED HT
+  topics:
+    - leaf: temperature
+      leaf_from: controlfloat
+      name: Temperature
+      max: 50
+      color: "#ff0000"
+    - leaf: humidity
+      leaf_from: controlfloat
+      name: Humidity
+      color: "#0000ff"
+    - leaf: battery
+      leaf_from: controlfloat
+      name: Battery
+      max: 5000
+      color: "#00ff00"
+# Library control - src/control/oled_loramesher.cpp. The mesh status it shows is read directly, not wired.
+control_oled_loramesher:
+  summary: false   # a display, not a reading
+  name: OLED LoRaMesher
+  topics:
+    - leaf: battery
+      leaf_from: controlfloat
+      name: Battery
+      max: 5000
+      color: "#00ff00"
+# Library control - src/control/oled_single.cpp. One reading, unit and label set in the sketch.
+control_oled_single:
+  summary: false   # a display, not a reading
+  name: OLED
+  topics:
+    - leaf: value
+      leaf_from: controlfloat
+      name: Value
+      max: 10000
 controlblinken:
   name: "Control Blinken"
   topics:
