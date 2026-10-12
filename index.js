@@ -663,6 +663,12 @@ class MqttOrganization {
 
   // Setup by configSubscribe
   messageReceived(date, topicPath, message, retained) {
+    // An empty payload is how a retained topic is deleted, and the broker treats it so - keeping it
+    // here as a value would keep a cleared node in reportNodes, with an empty name.
+    if (message === '') {
+      delete this.currentValue[topicPath];
+      return;
+    }
     if (this.shouldLog(date, topicPath, message, retained)) {
       this.log(date, topicPath, message);
     }
@@ -702,6 +708,14 @@ class MqttOrganization {
         }
       }
     }
+  }
+  // A node that has moved to another project, so reportNodes stops listing it at its old address.
+  forgetNode(projectId, nodeId) {
+    const prefix = `${this.id}/${projectId}/${nodeId}/`;
+    for (const store of [this.currentValue, this.lastValue, this.lastDate]) {
+      Object.keys(store).filter((k) => k.startsWith(prefix)).forEach((k) => delete store[k]);
+    }
+    if (this.projects[projectId]) { delete this.projects[projectId][nodeId]; }
   }
   // Starting with a topic return the current value of the topic - for periodic forwarders.\
   findLastValue(topic) {
@@ -1051,6 +1065,10 @@ class MqttLogger {
       res[orgId] = org.reportNodes();
     });
     return res;
+  }
+  forgetNode(orgId, projectId, nodeId) {
+    const org = this.clients[orgId];
+    if (org) { org.forgetNode(projectId, nodeId); }
   }
   // This is a generic config reader that reads a config.yaml and a config.d directory
   // It could be put in its own module

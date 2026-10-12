@@ -443,4 +443,20 @@ describe('quickdiscover and reportNodes', () => {
   test('nothing seen at all reports nothing', () => {
     assert.deepEqual(org.reportNodes(), {});
   });
+
+  test('a forgotten node is no longer reported, and its neighbours are', () => {
+    org.currentValue = {
+      'dev/lotus/n1/frugal_iot/name': 'Node One',
+      'dev/lotus/n10/frugal_iot/name': 'Node Ten', // shares a prefix with n1 but not a path
+    };
+    org.quickdiscover(new Date(1000), 'dev/lotus', 'n1');
+    org.forgetNode('lotus', 'n1');
+    assert.deepEqual(org.reportNodes(), { lotus: { n10: { 'frugal_iot/name': 'Node Ten' } } });
+  });
+
+  test('an empty message deletes the value rather than storing it', () => {
+    org.currentValue = { 'dev/lotus/n1/frugal_iot/name': 'Node One' };
+    org.messageReceived(new Date(1000), 'dev/lotus/n1/frugal_iot/name', '', true);
+    assert.deepEqual(org.reportNodes(), {});
+  });
 });
