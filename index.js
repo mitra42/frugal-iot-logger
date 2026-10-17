@@ -13,7 +13,8 @@ import { appendFile, appendFileSync, mkdir, mkdirSync, readFile, readdir } from 
 import mqtt from 'mqtt'; // https://www.npmjs.com/package/mqtt
 import nodepath from 'path'; // https://nodejs.org/api/path.html - "nodepath" because several
                              // functions here have a local variable called "path"
-import admin from 'firebase-admin'; // Firebase Admin SDK
+import { initializeApp, getApps, cert } from 'firebase-admin/app'; // Firebase Admin SDK
+import { getDatabase } from 'firebase-admin/database';
 //import tospliced from 'array.prototype.tospliced'; // tospliced only in Node > 20 (and webstorm currently 18)
 
 // =======
@@ -817,13 +818,13 @@ class Firebase extends Forwarder {
       // Initialize Firebase Admin SDK
       // Note: Only one Firebase app can be initialized per process
       // If multiple orgs need Firebase, they should share the same project or use named apps
-      if (!admin.apps.length) {
-        admin.initializeApp({
-          credential: admin.credential.cert(this.config.serviceAccount),
+      if (!getApps().length) {
+        initializeApp({
+          credential: cert(this.config.serviceAccount),
           databaseURL: this.config.databaseURL
         });
       }
-      this.db = admin.database();
+      this.db = getDatabase();
       console.log('Firebase initialized for org:', this.org.id);
       super.start(); // Start timer
 
