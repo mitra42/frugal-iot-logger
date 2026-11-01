@@ -388,6 +388,16 @@ describe('messageReceived', () => {
     ]);
   });
 
+  test('tells each forwarder whether the message was logged', () => {
+    const seen = [];
+    org.forwarders = [{ handleMessage: (date, topic, value, logged) => seen.push([topic, logged]) }];
+    org.messageReceived(new Date(1000), 'dev/lotus/n1/sht/temperature', '25.3', false);
+    org.messageReceived(new Date(1500), 'dev/lotus/n1/sht/temperature', '25.3', false); // duplicate
+    org.messageReceived(new Date(2000), 'dev/lotus/n1/sht/temperature', '25.4', true);  // retained
+    org.messageReceived(new Date(3000), 'dev/lotus/n1/set/relay/on', '1', false);       // command
+    assert.deepEqual(seen.map((x) => x[1]), [true, false, false, false]);
+  });
+
   test('hands over a reading of 0 as the number 0', () => {
     const seen = [];
     org.forwarders = [{ handleMessage: (date, topic, value) => seen.push(value) }];

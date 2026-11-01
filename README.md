@@ -44,6 +44,28 @@ A full example is in `examples/gsheets`, look at `gsheet.app` for instructions o
 setting up a spreadsheet, and at `config.d/organizations/dev.yaml`->`forwarders` for 
 how to configure it.
 
+#### OpenSearch Integration
+Readings can be sent to OpenSearch, to browse in OpenSearch Dashboards or Grafana. One document is
+sent per reading, buffered and sent in bulk requests every `flushSeconds`. Add to an organization's
+`forwarders:` list:
+
+```yaml
+forwarders:
+  - type: opensearch
+    node: https://localhost:9200   # required
+    apiKey: ...                    # or username: / password:
+    # ca: /path/to/root-ca.pem     # for a self-signed certificate
+    # insecure: true               # skip certificate checking - local demos only
+    # indexPrefix: frugaliot       # indexes are <prefix>-<org>-<YYYY.MM>
+    # flushSeconds: 10
+    topics:                        # which readings to send - leave out for all of them
+      - dev/lotus/+/sht/#          # + is one level, a trailing # is everything below
+```
+
+History from before this was switched on, or a gap while OpenSearch was down, can be filled from the
+CSV files: `node scripts/backfill-opensearch.js --config <config dir> --org <org> --data <data dir>`
+(add `--dry-run` to count what would be sent).
+
 #### Firebase Integration
 Automatic upload of MQTT data to Firebase Realtime Database is supported. This allows
 real-time data access, cloud storage, and easy integration with web/mobile apps.

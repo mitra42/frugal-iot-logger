@@ -6,6 +6,7 @@
   },
   "bugs": "https://github.com/mitra42/frugal-iot-logger/issues",
   "dependencies": {
+    "@opensearch-project/opensearch": "^3.9.0",
     "array.prototype.tospliced": "^1.1.5",
     "async": "^3.2.6",
     "firebase-admin": "^13.10.0",

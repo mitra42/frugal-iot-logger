@@ -256,3 +256,166 @@ describe('Gsheet', () => {
     assert.match(lines.join('\n'), /Failed to append/);
   });
 });
+
+describe('topicMatchesPattern', () => {
+  const { topicMatchesPattern: m } = _test;
+  test('an exact topic matches only itself', () => {
+    assert.ok(m('dev/lotus/n1/sht/temperature', 'dev/lotus/n1/sht/temperature'));
+    assert.ok(!m('dev/lotus/n1/sht/temperature', 'dev/lotus/n1/sht/humidity'));
+    assert.ok(!m('dev/lotus/n1/sht', 'dev/lotus/n1/sht/temperature'));
+  });
+  test('+ is exactly one level, at any depth', () => {
+    assert.ok(m('dev/lotus/+/sht/temperature', 'dev/lotus/n2/sht/temperature'));
+    assert.ok(m('dev/+/+/+/temperature', 'dev/lotus/n2/sht/temperature'));
+    assert.ok(!m('dev/lotus/+/temperature', 'dev/lotus/n2/sht/temperature'));
+  });
+  test('a trailing # is everything below', () => {
+    assert.ok(m('dev/lotus/#', 'dev/lotus/n1/sht/temperature'));
+    assert.ok(m('dev/lotus/+/sht/#', 'dev/lotus/n1/sht/temperature'));
+    assert.ok(!m('dev/lotus/+/soil/#', 'dev/lotus/n1/sht/temperature'));
+    assert.ok(!m('dev/other/#', 'dev/lotus/n1/sht/temperature'));
+  });
+});
+
+describe('OpenSearch', () => {
+  const { OpenSearch, openSearchDoc, openSearchIndex, openSearchBulkBody } = _test;
+  const T = 'dev/lotus/n1/sht/temperature';
+  const D = new Date('2026-11-01T10:20:30.000Z');
+
+  // Stands in for the client - records what would have been sent
+  const makeOs = (config = {}, bulk) => {
+    const sent = [];
+    const f = new OpenSearch(config, makeOrg());
+    f.client = { bulk: bulk || (async (req) => { sent.push(req.body); return { body: { errors: false } }; }) };
+    f.initialized = true; // start() would do this, but it builds a real client
+    return { f, sent };
+  };
+
+  test('a number goes in value, anything else in value_text', () => {
+    assert.deepEqual(openSearchDoc(D, T, 25.3), {
+      '@timestamp': '2026-11-01T10:20:30.000Z', org: 'dev', project: 'lotus', node: 'n1',
+      module: 'sht', leaf: 'temperature', topic: T, value: 25.3,
+    });
+    assert.equal(openSearchDoc(D, T, 0).value, 0);
+    assert.equal(openSearchDoc(D, T, 'hi').value_text, 'hi');
+    assert.equal(openSearchDoc(D, T, { a: 1 }).value_text, '{"a":1}');
+  });
+
+  test('a missing reading makes no document', () => {
+    assert.equal(openSearchDoc(D, T, null), null);
+    assert.equal(openSearchDoc(D, T, undefined), null);
+  });
+
+  test('the index is per org and month, in lower case', () => {
+    assert.equal(openSearchIndex('frugaliot', openSearchDoc(D, T, 1)), 'frugaliot-dev-2026.11');
+  });
+
+  test('the same reading always gets the same id', () => {
+    const [a] = openSearchBulkBody('p', [openSearchDoc(D, T, 1)]);
+    const [b] = openSearchBulkBody('p', [openSearchDoc(D, T, 2)]);
+    assert.equal(a.index._id, `${T}@${D.valueOf()}`);
+    assert.equal(a.index._id, b.index._id);
+  });
+
+  test('sends buffered readings, many topics in one request, on flush', async () => {
+    const { f, sent } = makeOs();
+    f.handleMessage(D, T, 25.3, true);
+    f.handleMessage(D, 'dev/lotus/n2/sht/humidity', 60, true);
+    assert.equal(sent.length, 0);   // buffered, not sent per message
+    await f.flush();
+    assert.equal(sent.length, 1);
+    assert.equal(sent[0].length, 4); // action + doc, twice
+    assert.equal(f.buffer.length, 0);
+  });
+
+  test('only sends topics that match the configured patterns', async () => {
+    const { f, sent } = makeOs({ topics: ['dev/lotus/+/sht/temperature'] });
+    f.handleMessage(D, T, 25.3, true);
+    f.handleMessage(D, 'dev/lotus/n1/sht/humidity', 60, true);
+    f.handleMessage(D, 'dev/lotus/n1/soil/moisture', 10, true);
+    await f.flush();
+    assert.equal(sent[0].filter((x) => x.topic).length, 1);
+    assert.equal(sent[0][1].topic, T);
+  });
+
+  test('sends everything when no topics are configured', async () => {
+    const { f, sent } = makeOs();
+    f.handleMessage(D, T, 1, true);
+    f.handleMessage(D, 'dev/lotus/n1/soil/moisture', 2, true);
+    await f.flush();
+    assert.equal(sent[0].length, 4);
+  });
+
+  test('ignores a message that was not logged', async () => {
+    const { f, sent } = makeOs();
+    f.handleMessage(D, T, 1, false);
+    await f.flush();
+    assert.equal(sent.length, 0);
+  });
+
+  test('does nothing before it has started', () => {
+    const { f } = makeOs();
+    f.initialized = false;
+    f.handleMessage(D, T, 1, true);
+    assert.equal(f.buffer.length, 0);
+  });
+
+  test('a failed send is reported and dropped, and the next one still goes', async (t) => {
+    const errors = [];
+    t.mock.method(console, 'error', (...a) => errors.push(a.join(' ')));
+    let calls = 0;
+    const { f } = makeOs({}, async () => { if (calls++ === 0) throw new Error('down'); return { body: {} }; });
+    f.handleMessage(D, T, 1, true);
+    await f.flush();
+    assert.match(errors[0], /could not send 1 readings: down/);
+    assert.equal(f.sending, false);
+    f.handleMessage(D, T, 2, true);
+    await f.flush();
+    assert.equal(calls, 2);
+  });
+
+  test('says how many readings the server rejected', async (t) => {
+    const errors = [];
+    t.mock.method(console, 'error', (...a) => errors.push(a.join(' ')));
+    const { f } = makeOs({}, async () => ({ body: { errors: true, items: [{ index: { error: { type: 'mapper_parsing_exception' } } }] } }));
+    f.handleMessage(D, T, 1, true);
+    await f.flush();
+    assert.match(errors[0], /1 of 1 readings rejected/);
+  });
+
+  test('installs an index template that makes value a double, before the first write', async () => {
+    const calls = [];
+    const f = new OpenSearch({}, makeOrg());
+    f.initialized = true;
+    f.client = {
+      indices: { putIndexTemplate: async (req) => { calls.push('template'); f.templateReq = req; } },
+      bulk: async () => { calls.push('bulk'); return { body: {} }; },
+    };
+    f.ready = f.ensureTemplate();
+    f.handleMessage(D, T, 0, true);
+    await f.flush();
+    assert.deepEqual(calls, ['template', 'bulk']);
+    assert.equal(f.templateReq.body.template.mappings.properties.value.type, 'double');
+    assert.deepEqual(f.templateReq.body.index_patterns, ['frugaliot-*']);
+    assert.equal(f.templateReq.body.template.settings.number_of_replicas, 0);
+  });
+
+  test('carries on, with a message, if the template cannot be installed', async (t) => {
+    const errors = [];
+    t.mock.method(console, 'error', (...a) => errors.push(a.join(' ')));
+    const f = new OpenSearch({}, makeOrg());
+    f.client = { indices: { putIndexTemplate: async () => { throw new Error('no'); } } };
+    await f.ensureTemplate();
+    assert.match(errors[0], /could not install the index template/);
+  });
+
+  test('flushSeconds sets the timer', () => {
+    const f = new OpenSearch({ flushSeconds: 3 }, makeOrg());
+    assert.equal(f.config.intervalSeconds, 3);
+    assert.equal(new OpenSearch({}, makeOrg()).config.intervalSeconds, 10);
+  });
+
+  test('is a known forwarder type', () => {
+    assert.equal(_test.FORWARDER_TYPES.opensearch, OpenSearch);
+  });
+});

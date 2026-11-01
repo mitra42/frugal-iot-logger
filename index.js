@@ -9,12 +9,13 @@
 
 import async from 'async'; // https://caolan.github.io/async/v3/docs.html
 import yaml from 'js-yaml'; // https://www.npmjs.com/package/js-yaml
-import { appendFile, appendFileSync, mkdir, mkdirSync, readFile, readdir } from "fs"; // https://nodejs.org/api/fs.html
+import { appendFile, appendFileSync, mkdir, mkdirSync, readFile, readFileSync, readdir } from "fs"; // https://nodejs.org/api/fs.html
 import mqtt from 'mqtt'; // https://www.npmjs.com/package/mqtt
 import nodepath from 'path'; // https://nodejs.org/api/path.html - "nodepath" because several
                              // functions here have a local variable called "path"
 import { initializeApp, getApps, cert } from 'firebase-admin/app'; // Firebase Admin SDK
 import { getDatabase } from 'firebase-admin/database';
+import { Client as OpenSearchClient } from '@opensearch-project/opensearch'; // OpenSearch, see class OpenSearch
 //import tospliced from 'array.prototype.tospliced'; // tospliced only in Node > 20 (and webstorm currently 18)
 
 // =======
@@ -668,7 +669,8 @@ class MqttOrganization {
       delete this.currentValue[topicPath];
       return;
     }
-    if (this.shouldLog(date, topicPath, message, retained)) {
+    const logged = this.shouldLog(date, topicPath, message, retained);
+    if (logged) {
       this.log(date, topicPath, message);
     }
     // Offer the message to every forwarder - those that work per message (Firebase) act on it, those
@@ -677,8 +679,10 @@ class MqttOrganization {
       // Find the current value, already converted and saved above
       let value = this.currentValue[topicPath] ?? message; // ?? not || - a reading of 0 is a value, not a missing one
       // Pass only value (not message) - message is raw string, value is parsed/typed
+      // "logged" says whether it passed the log and duplicates rules, i.e. whether it went to the CSV
+      // file. Firebase wants every message so ignores it, OpenSearch wants only those that were.
       for (let f of this.forwarders) {
-        f.handleMessage(date, topicPath, value);
+        f.handleMessage(date, topicPath, value, logged);
       }
     }
   }
@@ -1050,10 +1054,190 @@ class Gsheet extends Forwarder {
     });
  }
 }
+// Does a topic match a pattern from a forwarder's "topics:" list? Levels are split on "/";
+// "+" stands for exactly one level and a trailing "#" for everything below (MQTT's own wildcards),
+// so "dev/lotus/+/sht/#" is every reading of every node's sht module. Anything else must be equal.
+// (Subscription.matches is not used because it only handles "+" at the first five levels.)
+function topicMatchesPattern(pattern, topic) {
+  const p = pattern.split('/');
+  const t = topic.split('/');
+  for (let i = 0; i < p.length; i++) {
+    if (p[i] === '#' && i === p.length - 1) return t.length >= i;
+    if (i >= t.length) return false;
+    if (p[i] !== '+' && p[i] !== t[i]) return false;
+  }
+  return p.length === t.length;
+}
+
+// ================== OpenSearch Integration ========================
+// Sends readings to OpenSearch, for browsing in OpenSearch Dashboards or Grafana.
+//
+// Why OpenSearch and not Elasticsearch: Elasticsearch moved off an open-source licence, and its
+// Homebrew formula went with it; OpenSearch (the Apache-licensed fork) installs with
+// "brew install opensearch opensearch-dashboards" and with apt on the server, and Grafana reads it.
+// The cost is that Dashboards is a fork of Kibana, so Kibana guides are close but not identical.
+// If that decision is revisited, this class is the only place that needs to change - the client
+// library's bulk() call and the document shape are the same for Elasticsearch
+// (swap in @elastic/elasticsearch, whose bulk() takes the same arguments).
+//
+// One document per reading: { @timestamp, org, project, node, module, leaf, topic, value | value_text }
+// A number goes in "value" and anything else in "value_text", so one topic never has two types in
+// the same field - OpenSearch refuses a document whose type disagrees with the index mapping.
+// Documents are buffered and sent in a bulk request every flushSeconds, so a single request carries
+// many readings from many nodes.
+//
+// Configuration, in an organization's "forwarders:" list:
+//   - type: opensearch
+//     node: https://localhost:9200       # required
+//     apiKey: ...                         # or username: / password:
+//     ca: /path/to/root-ca.pem            # optional, for a self-signed certificate
+//     insecure: true                      # optional, skip certificate checking (local demos only)
+//     indexPrefix: frugaliot              # optional, indexes are <prefix>-<org>-<YYYY.MM>
+//     flushSeconds: 10                    # optional
+//     replicas: 0                         # optional, copies of each index - 0 unless there are several servers
+//     topics:                             # optional - which of the logged readings to send, default all
+//       - dev/lotus/+/sht/#
+const OPENSEARCH_MAX_BATCH = 1000;   // flush early at this many documents
+const OPENSEARCH_MAX_BUFFER = 20000; // while the server is unreachable, drop the oldest beyond this
+
+// The document for one reading, or null if it is not one to store (a "nan" reading is how a
+// sensor says it has none, and a gap is more honest than a made-up number).
+function openSearchDoc(date, topic, value) {
+  if (value === null || value === undefined) return null;
+  const [org, project, node, module, ...rest] = topic.split('/');
+  const doc = {
+    '@timestamp': date.toISOString(),
+    org, project, node, module,
+    leaf: rest.join('/'),
+    topic,
+  };
+  if (typeof value === 'number') { doc.value = value; }
+  else { doc.value_text = typeof value === 'string' ? value : JSON.stringify(value); }
+  return doc;
+}
+// The index a document belongs in. Monthly, so old months can be dropped, and lower case because
+// OpenSearch insists on it.
+function openSearchIndex(prefix, doc) {
+  return `${prefix}-${doc.org}-${doc['@timestamp'].substring(0, 7).replace('-', '.')}`.toLowerCase();
+}
+// The lines a bulk request is made of: an action line then the document, for each.
+// The id comes from topic and time so sending the same reading twice (a backfill that overlaps live
+// data, say) replaces it rather than doubling it.
+function openSearchBulkBody(prefix, docs) {
+  return docs.flatMap((doc) => [
+    { index: { _index: openSearchIndex(prefix, doc), _id: `${doc.topic}@${Date.parse(doc['@timestamp'])}` } },
+    doc,
+  ]);
+}
+
+class OpenSearch extends Forwarder {
+  constructor(config, org) {
+    // tick() is the flush, so flushSeconds is the base class's intervalSeconds
+    super({ ...config, intervalSeconds: config.flushSeconds ?? 10 }, org);
+    this.client = null;
+    this.ready = null;
+    this.buffer = [];
+    this.sending = false;
+    this.indexPrefix = config.indexPrefix || 'frugaliot';
+  }
+  start() {
+    if (!this.config.node) {
+      console.error(`org ${this.org.id}: opensearch forwarder has no "node:" URL - not started`);
+      return;
+    }
+    const options = { node: this.config.node };
+    if (this.config.apiKey) { options.auth = { apiKey: this.config.apiKey }; }
+    else if (this.config.username) { options.auth = { username: this.config.username, password: this.config.password }; }
+    if (this.config.ca) { options.ssl = { ca: readFileSync(this.config.ca) }; }
+    if (this.config.insecure) { options.ssl = { ...options.ssl, rejectUnauthorized: false }; }
+    this.client = new OpenSearchClient(options);
+    console.log('OpenSearch forwarding for org:', this.org.id, 'to', this.config.node);
+    this.ready = this.ensureTemplate(); // flush() waits for this before the first write
+    super.start();
+  }
+  // Without a template OpenSearch guesses each field's type from the first document in a new index,
+  // and a first reading of 0 or 27 makes "value" a long - after which 27.1 is stored as 27 and every
+  // average is truncated, with nothing to say so. So say what the types are, before writing.
+  // Replicas default to 0 because the usual setup is one server, where a replica can never be
+  // placed and just leaves every index yellow. Existing indexes are not changed by this.
+  async ensureTemplate() {
+    try {
+      await this.client.indices.putIndexTemplate({
+        name: this.indexPrefix,
+        body: {
+          index_patterns: [`${this.indexPrefix}-*`],
+          template: {
+            settings: { number_of_replicas: this.config.replicas ?? 0 },
+            mappings: {
+              properties: {
+                '@timestamp': { type: 'date' },
+                org: { type: 'keyword' }, project: { type: 'keyword' }, node: { type: 'keyword' },
+                module: { type: 'keyword' }, leaf: { type: 'keyword' }, topic: { type: 'keyword' },
+                value: { type: 'double' },
+                value_text: { type: 'text' },
+              },
+            },
+          },
+        },
+      });
+    } catch (err) {
+      console.error(`OpenSearch ${this.org.id}: could not install the index template, types will be guessed:`, err.message);
+    }
+  }
+  stop() {
+    super.stop();
+    return this.flush();
+  }
+  wanted(topic) {
+    const patterns = this.config.topics;
+    return !patterns || patterns.length === 0 || patterns.some((p) => topicMatchesPattern(p, topic));
+  }
+  handleMessage(date, topic, value, logged) {
+    // Only what was written to the CSV files: not a log:false topic, a duplicate, a retained value
+    // or a "set/" command. Those pass through the logger but are not readings.
+    if (!logged || !this.initialized || !this.wanted(topic)) return;
+    const doc = openSearchDoc(date, topic, value);
+    if (!doc) return;
+    this.buffer.push(doc);
+    if (this.buffer.length > OPENSEARCH_MAX_BUFFER) {
+      const dropped = this.buffer.length - OPENSEARCH_MAX_BUFFER;
+      this.buffer.splice(0, dropped);
+      console.error(`OpenSearch ${this.org.id}: buffer full, dropped ${dropped} oldest readings`);
+    }
+    if (this.buffer.length >= OPENSEARCH_MAX_BATCH) { this.flush(); }
+  }
+  tick() {
+    return this.flush();
+  }
+  // Send what is buffered. A failed batch is logged and dropped rather than retried - the CSV files
+  // are the complete record, and a gap in the index is honest where a late burst under the wrong
+  // load would not be (scripts/backfill-opensearch.js fills a gap from them).
+  async flush() {
+    if (this.sending || this.buffer.length === 0 || !this.client) return;
+    this.sending = true;
+    await this.ready;
+    const docs = this.buffer.splice(0, this.buffer.length);
+    try {
+      const res = await this.client.bulk({ body: openSearchBulkBody(this.indexPrefix, docs) });
+      const body = res.body || res;
+      if (body.errors) {
+        const failed = (body.items || []).filter((i) => i.index && i.index.error);
+        console.error(`OpenSearch ${this.org.id}: ${failed.length} of ${docs.length} readings rejected, first:`,
+          JSON.stringify(failed[0] && failed[0].index.error));
+      }
+    } catch (err) {
+      console.error(`OpenSearch ${this.org.id}: could not send ${docs.length} readings:`, err.message);
+    } finally {
+      this.sending = false;
+    }
+  }
+}
+
 // The values "type:" can take in an organization's forwarders list
 const FORWARDER_TYPES = {
   firebase: Firebase,
   gsheet: Gsheet,
+  opensearch: OpenSearch,
 };
 // ================== Main Logger Class ========================
 class MqttLogger {
@@ -1573,6 +1757,11 @@ const _test = {
   Forwarder,
   Firebase,
   Gsheet,
+  OpenSearch,
+  topicMatchesPattern,
+  openSearchDoc,
+  openSearchIndex,
+  openSearchBulkBody,
   FORWARDER_TYPES,
   appendPending,
   flushPending,
