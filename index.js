@@ -290,8 +290,7 @@ class MqttOrganization {
     this.status = "constructing"; // Note that the status isn't currently available anywhere
     this.projects = {};
     this.subscriptions = [];
-    this.gsheets = [];
-    this.firebases = [];
+    this.forwarders = []; // Forwarder instances, built from config_org.forwarders by forwardersSubscribe
     this.currentValue = {}
     this.lastDate = {};
     this.lastValue = {};
@@ -324,8 +323,7 @@ class MqttOrganization {
       this.mqtt_client.on("connect", () => {
         this.mqtt_status_set('connect');
         this.configSubscribe();
-        this.gsheetsSubscribe();
-        this.firebaseSubscribe();
+        this.forwardersSubscribe();
       });
       this.mqtt_client.on("reconnect", () => {
         this.mqtt_status_set('reconnect');
@@ -673,17 +671,16 @@ class MqttOrganization {
     if (this.shouldLog(date, topicPath, message, retained)) {
       this.log(date, topicPath, message);
     }
-      // Send to all Firebase instances if configured - Google sheets doesnt do anything at the per-message level
-      // TODO-8 this should really be a generic forwarder function, that does nothing for Gsheets
-      if (this.firebases.length > 0) {
-        // Find the current value, already converted and saved above
-        let value = this.currentValue[topicPath] || message;
-        // Pass only value (not message) - message is raw string, value is parsed/typed
-        // Filtering by allowedNodes happens inside writeData for each instance
-        for (let fb of this.firebases) {
-          fb.handleMessage(date, topicPath, value);
-        }
+    // Offer the message to every forwarder - those that work per message (Firebase) act on it, those
+    // that work on a timer (Gsheet) inherit a handleMessage that does nothing.
+    if (this.forwarders.length > 0) {
+      // Find the current value, already converted and saved above
+      let value = this.currentValue[topicPath] ?? message; // ?? not || - a reading of 0 is a value, not a missing one
+      // Pass only value (not message) - message is raw string, value is parsed/typed
+      for (let f of this.forwarders) {
+        f.handleMessage(date, topicPath, value);
       }
+    }
   }
   log(date, topic, message) {
     const dir = topicToDir(topic);
@@ -698,15 +695,31 @@ class MqttOrganization {
   appendPathFile(path, filename, message) {
     appendPending(path, filename, message);
   }
-  gsheetsSubscribe() {
-    if (this.gsheets.length === 0) { // connect is called after onReconnect - do not re-add subscriptions
-      let o = this.config_org;
-      if (o.gsheets) {
-        for (let gsconfig of o.gsheets) {
-          let gs = new Gsheet(gsconfig, this);
-          this.gsheets.push(gs);
-          gs.start();
+  // Build and start the forwarders listed in the organization's config, e.g.
+  //   forwarders:
+  //     - type: gsheet
+  //       url: ...
+  //     - type: firebase
+  //       ...
+  // There can be any number of each type.
+  forwardersSubscribe() {
+    if (this.forwarders.length === 0) { // connect is called after onReconnect - do not re-add subscriptions
+      const o = this.config_org;
+      // The older per-type keys are no longer read. Say so, rather than let forwarding stop silently.
+      for (const legacy of ['gsheets', 'firebase']) {
+        if (o[legacy]) {
+          console.error(`org ${this.id}: "${legacy}:" is no longer supported and is being ignored - move it under "forwarders:" with "type: ${legacy === 'gsheets' ? 'gsheet' : 'firebase'}"`);
         }
+      }
+      for (const fconfig of (o.forwarders || [])) {
+        const FClass = FORWARDER_TYPES[fconfig && fconfig.type];
+        if (!FClass) {
+          console.error(`org ${this.id}: unknown forwarder type "${fconfig && fconfig.type}" - ignored. Known types: ${Object.keys(FORWARDER_TYPES).join(', ')}`);
+          continue;
+        }
+        const f = new FClass(fconfig, this);
+        this.forwarders.push(f);
+        f.start();
       }
     }
   }
@@ -723,22 +736,6 @@ class MqttOrganization {
     return this.currentValue[topic];
   }
 
-  // Initialize Firebase integration if configured in the organization's YAML config
-  // Pattern matches gsheetsSubscribe - supports multiple Firebase instances
-  firebaseSubscribe() {
-    if (this.firebases.length === 0) { // connect is called after onReconnect - do not re-add subscriptions
-      let o = this.config_org;
-      if (o.firebase) {
-        // Support both single config object and array of configs
-        const configs = Array.isArray(o.firebase) ? o.firebase : [o.firebase];
-        for (let fbconfig of configs) {
-          let fb = new Firebase(fbconfig, this);
-          this.firebases.push(fb);
-          fb.start();
-        }
-      }
-    }
-  }
   // Linear time remap of values to avoid n^2 search for reportNodes
   // Return a structure { projectid: { nodeid: { moduleid/leaf: value } but just for those fields in reportLeafs and lastseen
   reportNodes() {
@@ -768,7 +765,7 @@ class MqttOrganization {
   }
 }  // MqttOrganization
 
-// ================== Forwarder - base class for Firebase, Gsheet, etc. ========================
+// ================== Forwarder - base class for Firebase, Gsheet, OpenSearch etc. ========================
 class Forwarder {
   constructor(config, org) {
     this.config = config;
@@ -800,6 +797,9 @@ class Forwarder {
   }
   handleMessage(date, topic, message) {
     // Default does nothing - subclasses can override if needed
+  }
+  tick() {
+    // Default does nothing - subclasses that set intervalSeconds override this
   }
 }
 // ================== Firebase Integration ========================
@@ -1050,6 +1050,11 @@ class Gsheet extends Forwarder {
     });
  }
 }
+// The values "type:" can take in an organization's forwarders list
+const FORWARDER_TYPES = {
+  firebase: Firebase,
+  gsheet: Gsheet,
+};
 // ================== Main Logger Class ========================
 class MqttLogger {
   constructor() {
@@ -1568,6 +1573,7 @@ const _test = {
   Forwarder,
   Firebase,
   Gsheet,
+  FORWARDER_TYPES,
   appendPending,
   flushPending,
   flushPendingSync,

@@ -7,7 +7,7 @@ import assert from 'node:assert/strict';
 import { readFileSync, existsSync } from 'node:fs';
 import nodepath from 'node:path';
 import { _test } from '../index.js';
-import { makeOrg, makeTempDir, resetModuleState, captureConsole } from './support.js';
+import { makeOrg, orgConfig, makeTempDir, resetModuleState, captureConsole } from './support.js';
 
 const flush = () => new Promise((resolve) => _test.flushPending(resolve));
 
@@ -377,7 +377,7 @@ describe('messageReceived', () => {
 
   test('hands the converted value to every forwarder, logged or not', () => {
     const seen = [];
-    org.firebases = [{ handleMessage: (date, topic, value) => seen.push([topic, value]) }];
+    org.forwarders = [{ handleMessage: (date, topic, value) => seen.push([topic, value]) }];
 
     org.messageReceived(new Date(1000), 'dev/lotus/n1/sht/temperature', '25.3', false);
     org.messageReceived(new Date(2000), 'dev/lotus/n1/frugal_iot/description', 'A node', false);
@@ -386,6 +386,66 @@ describe('messageReceived', () => {
       ['dev/lotus/n1/sht/temperature', 25.3],   // Number, not the raw string
       ['dev/lotus/n1/frugal_iot/description', 'A node'],
     ]);
+  });
+
+  test('hands over a reading of 0 as the number 0', () => {
+    const seen = [];
+    org.forwarders = [{ handleMessage: (date, topic, value) => seen.push(value) }];
+    org.messageReceived(new Date(1000), 'dev/lotus/n1/sht/humidity', '0', false);
+    assert.deepEqual(seen, [0]);
+  });
+});
+
+describe('forwardersSubscribe', () => {
+  const started = [];
+  class Fake {
+    constructor(config) { this.config = config; }
+    start() { started.push(this.config); }
+  }
+  let saved, errors, origError;
+  beforeEach(() => {
+    org = makeOrg('dev', { ...orgConfig }); // own copy - the tests set keys on it
+    started.length = 0;
+    saved = { ..._test.FORWARDER_TYPES };
+    _test.FORWARDER_TYPES.fake = Fake;
+    errors = [];
+    origError = console.error;
+    console.error = (...a) => errors.push(a.join(' '));
+  });
+  afterEach(() => {
+    for (const k of Object.keys(_test.FORWARDER_TYPES)) delete _test.FORWARDER_TYPES[k];
+    Object.assign(_test.FORWARDER_TYPES, saved);
+    console.error = origError;
+  });
+
+  test('starts one forwarder per entry, including several of the same type', () => {
+    org.config_org.forwarders = [{ type: 'fake', n: 1 }, { type: 'fake', n: 2 }];
+    org.forwardersSubscribe();
+    assert.equal(org.forwarders.length, 2);
+    assert.deepEqual(started.map((c) => c.n), [1, 2]);
+  });
+
+  test('does not add them again on reconnect', () => {
+    org.config_org.forwarders = [{ type: 'fake' }];
+    org.forwardersSubscribe();
+    org.forwardersSubscribe();
+    assert.equal(org.forwarders.length, 1);
+  });
+
+  test('skips an unknown type and says so', () => {
+    org.config_org.forwarders = [{ type: 'nonesuch' }, { type: 'fake' }];
+    org.forwardersSubscribe();
+    assert.equal(org.forwarders.length, 1);
+    assert.match(errors[0], /unknown forwarder type "nonesuch"/);
+  });
+
+  test('warns about the old gsheets: and firebase: keys rather than ignoring them silently', () => {
+    org.config_org.gsheets = [{ url: 'x' }];
+    org.config_org.firebase = { databaseURL: 'y' };
+    org.forwardersSubscribe();
+    assert.equal(org.forwarders.length, 0);
+    assert.equal(errors.length, 2);
+    assert.match(errors[0], /"gsheets:" is no longer supported/);
   });
 });
 

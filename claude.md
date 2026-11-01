@@ -151,14 +151,15 @@ config.yaml                  # Main configuration
       mqtt_password: ...
       projects:
         {project-id}: { ... }
-      firebase:               # Optional Firebase config
-        serviceAccount: ...
-        databaseURL: ...
-        allowedNodes: [...]    # Filter nodes to forward
-      gsheets:               # Optional Google Sheets config
-        url: ...              # Webhook URL
-        topics: [...]         # Topics to forward
-        intervalSeconds: 300
+      forwarders:             # Optional list - any number, of any type
+        - type: firebase
+          serviceAccount: ...
+          databaseURL: ...
+          allowedNodes: [...]  # Filter nodes to forward
+        - type: gsheet         # Optional Google Sheets config
+          url: ...             # Webhook URL
+          topics: [...]        # Topics to forward
+          intervalSeconds: 300
 ```
 
 ### Configuration Hierarchy
@@ -424,14 +425,15 @@ If **both** rules are specified, message is skipped if **neither** condition is 
 ### Configuration
 
 ```yaml
-firebase:
-  serviceAccount: ./firebase-service-account.json
-  databaseURL: https://project-rtdb.region.firebasedatabase.app
-  allowedNodes:
+forwarders:
+  - type: firebase
+    serviceAccount: ./firebase-service-account.json
+    databaseURL: https://project-rtdb.region.firebasedatabase.app
+    allowedNodes:
     - dev/lotus/esp8266    # Prefix match or exact node ID
     - esp8266-fb94bb
-  intervalSeconds: 300
-  verbose: true
+    intervalSeconds: 300
+    verbose: true
 ```
 
 ### Data Structure
@@ -456,13 +458,14 @@ nodes/
 ### Configuration
 
 ```yaml
-gsheets:
-  url: https://script.google.com/macros/d/{scriptId}/userweb
-  sheet: "Sheet1"
-  topics:
-    - "dev/lotus/esp8266-fb94bb/sht/temperature"
-    - "dev/lotus/esp8266-fb94bb/sht/humidity"
-  intervalSeconds: 300
+forwarders:
+  - type: gsheet
+    url: https://script.google.com/macros/d/{scriptId}/userweb
+    sheet: "Sheet1"
+    topics:
+      - "dev/lotus/esp8266-fb94bb/sht/temperature"
+      - "dev/lotus/esp8266-fb94bb/sht/humidity"
+    intervalSeconds: 300
 ```
 
 ### Data Format
@@ -499,8 +502,9 @@ Each tick sends:
 Enable verbose logging:
 
 ```yaml
-firebase:
-  verbose: true
+forwarders:
+  - type: firebase
+    verbose: true
 ```
 
 Check CSV files:

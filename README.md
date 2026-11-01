@@ -41,7 +41,7 @@ an organization's config file (e.g. `dev.yaml`) with a reference to the app URL
 and the list of topics that should be logged to the columns.
 
 A full example is in `examples/gsheets`, look at `gsheet.app` for instructions on 
-setting up a spreadsheet, and at `config.d/organizations/dev.yaml`->`gsheets` for 
+setting up a spreadsheet, and at `config.d/organizations/dev.yaml`->`forwarders` for 
 how to configure it.
 
 #### Firebase Integration
