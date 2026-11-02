@@ -5,7 +5,11 @@
 import { test, describe, beforeEach, afterEach } from 'node:test';
 import assert from 'node:assert/strict';
 import { _test } from '../index.js';
-import { makeOrg } from './support.js';
+import { mkdirSync, writeFileSync } from 'node:fs';
+import nodepath from 'node:path';
+import { gzipSync } from 'node:zlib';
+import { backfillOpenSearch } from '../index.js';
+import { makeOrg, makeTempDir } from './support.js';
 
 const { Forwarder, Firebase, Gsheet } = _test;
 
@@ -417,5 +421,65 @@ describe('OpenSearch', () => {
 
   test('is a known forwarder type', () => {
     assert.equal(_test.FORWARDER_TYPES.opensearch, OpenSearch);
+  });
+});
+
+describe('backfillOpenSearch', () => {
+  let dir, cleanup, sent;
+  const client = { bulk: async (req) => { sent.push(req.body); return { body: { errors: false } }; } };
+  const put = (topic, file, text, gz = false) => {
+    const d = nodepath.join(dir, ...topic.split('/'));
+    mkdirSync(d, { recursive: true });
+    writeFileSync(nodepath.join(d, file), gz ? gzipSync(text) : text);
+  };
+  const T = 'dev/lotus/n1/sht/temperature';
+  beforeEach(() => {
+    ({ dir, cleanup } = makeTempDir());
+    sent = [];
+    put(T, '2026-09-23.csv.gz', '1790000000000,"20.5"\n', true);
+    put(T, '2026-09-24.csv', '1790100000000,"21"\n1790100001000,"hello"\n1790100002000,""\nnot a line\n');
+    put('dev/lotus/n1/soil/moisture', '2026-09-24.csv', '1790100000000,"0"\n');
+    put('winam/p/n/m/l', '2026-09-24.csv', '1790100000000,"9"\n'); // another organization
+  });
+  afterEach(() => cleanup());
+  const docs = () => sent.flat().filter((x) => x.topic);
+
+  test('sends every reading of the organization, plain and compressed, numbers as numbers', async () => {
+    const r = await backfillOpenSearch({ config: {}, org: 'dev', dataDir: dir, client });
+    assert.equal(r.sent, 4); // 20.5, 21, "hello", 0 - the blank and the garbage line are skipped
+    const byTopic = docs();
+    assert.deepEqual(byTopic.filter((d) => d.leaf === 'temperature').map((d) => d.value ?? d.value_text), [20.5, 21, 'hello'].sort(() => 0));
+    assert.equal(docs().find((d) => d.leaf === 'moisture').value, 0);
+    assert.ok(!docs().some((d) => d.org === 'winam'));
+  });
+
+  test('honours the forwarder topics list and says how many files that skipped', async () => {
+    const r = await backfillOpenSearch({ config: { topics: ['dev/lotus/+/sht/#'] }, org: 'dev', dataDir: dir, client });
+    assert.equal(r.skippedFiles, 1);
+    assert.ok(docs().every((d) => d.module === 'sht'));
+  });
+
+  test('skips files older than since', async () => {
+    const r = await backfillOpenSearch({ config: {}, org: 'dev', dataDir: dir, client, since: '2026-09-24' });
+    assert.ok(!docs().some((d) => d.value === 20.5));
+    assert.equal(r.sent, 3);
+  });
+
+  test('a dry run counts and sends nothing', async () => {
+    const r = await backfillOpenSearch({ config: {}, org: 'dev', dataDir: dir, dryRun: true });
+    assert.equal(r.sent, 4);
+    assert.equal(sent.length, 0);
+  });
+
+  test('says so when the organization has no data', async () => {
+    await assert.rejects(backfillOpenSearch({ config: {}, org: 'ghost', dataDir: dir, client }), /No .*ghost/);
+  });
+
+  test('sending twice gives every reading the same id both times', async () => {
+    await backfillOpenSearch({ config: {}, org: 'dev', dataDir: dir, client });
+    const first = sent.flat().filter((x) => x.index).map((x) => x.index._id);
+    sent = [];
+    await backfillOpenSearch({ config: {}, org: 'dev', dataDir: dir, client });
+    assert.deepEqual(sent.flat().filter((x) => x.index).map((x) => x.index._id), first);
   });
 });

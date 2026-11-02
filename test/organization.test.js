@@ -6,7 +6,7 @@ import { test, describe, beforeEach, afterEach } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync, existsSync } from 'node:fs';
 import nodepath from 'node:path';
-import { _test } from '../index.js';
+import { _test, MqttLogger } from '../index.js';
 import { makeOrg, orgConfig, makeTempDir, resetModuleState, captureConsole } from './support.js';
 
 const flush = () => new Promise((resolve) => _test.flushPending(resolve));
@@ -408,14 +408,17 @@ describe('messageReceived', () => {
 
 describe('forwardersSubscribe', () => {
   const started = [];
+  const stopped = [];
   class Fake {
     constructor(config) { this.config = config; }
-    start() { started.push(this.config); }
+    start() { if (this.config.explode) throw new Error('bad url'); started.push(this.config); }
+    async stop() { stopped.push(this.config); }
   }
   let saved, errors, origError;
   beforeEach(() => {
     org = makeOrg('dev', { ...orgConfig }); // own copy - the tests set keys on it
     started.length = 0;
+    stopped.length = 0;
     saved = { ..._test.FORWARDER_TYPES };
     _test.FORWARDER_TYPES.fake = Fake;
     errors = [];
@@ -447,6 +450,47 @@ describe('forwardersSubscribe', () => {
     org.forwardersSubscribe();
     assert.equal(org.forwarders.length, 1);
     assert.match(errors[0], /unknown forwarder type "nonesuch"/);
+  });
+
+  test('adds forwarders handed over at runtime to those in the config file', () => {
+    org.config_org.forwarders = [{ type: 'fake', n: 'file' }];
+    org.extraForwarders = [{ type: 'fake', n: 'db' }];
+    org.forwardersSubscribe();
+    assert.deepEqual(started.map((c) => c.n), ['file', 'db']);
+  });
+
+  test('replacing them stops the old ones, starts the new, and leaves the file ones running', async () => {
+    org.config_org.forwarders = [{ type: 'fake', n: 'file' }];
+    org.extraForwarders = [{ type: 'fake', n: 'db1' }];
+    org.forwardersSubscribe();
+    started.length = 0;
+    await org.setExtraForwarders([{ type: 'fake', n: 'db2' }]);
+    assert.deepEqual(stopped.map((c) => c.n).sort(), ['db1', 'file']); // all stopped...
+    assert.deepEqual(started.map((c) => c.n), ['file', 'db2']);        // ...file one restarted with the new set
+    assert.equal(org.forwarders.length, 2);
+  });
+
+  test('replacing them before the broker has connected just remembers them', async () => {
+    await org.setExtraForwarders([{ type: 'fake', n: 'db' }]);
+    assert.equal(started.length, 0);
+    org.forwardersSubscribe();
+    assert.deepEqual(started.map((c) => c.n), ['db']);
+  });
+
+  test('removing them all leaves just the file ones', async () => {
+    org.config_org.forwarders = [{ type: 'fake', n: 'file' }];
+    org.extraForwarders = [{ type: 'fake', n: 'db' }];
+    org.forwardersSubscribe();
+    await org.setExtraForwarders([]);
+    assert.equal(org.forwarders.length, 1);
+    assert.equal(org.forwarders[0].config.n, 'file');
+  });
+
+  test('one forwarder that cannot start does not stop the others', () => {
+    org.extraForwarders = [{ type: 'fake', explode: true }, { type: 'fake', n: 'ok' }];
+    org.forwardersSubscribe();
+    assert.deepEqual(started.map((c) => c.n), ['ok']);
+    assert.match(errors[0], /could not start: bad url/);
   });
 
   test('warns about the old gsheets: and firebase: keys rather than ignoring them silently', () => {
@@ -528,5 +572,21 @@ describe('quickdiscover and reportNodes', () => {
     org.currentValue = { 'dev/lotus/n1/frugal_iot/name': 'Node One' };
     org.messageReceived(new Date(1000), 'dev/lotus/n1/frugal_iot/name', '', true);
     assert.deepEqual(org.reportNodes(), {});
+  });
+});
+
+describe('MqttLogger.setForwarders', () => {
+  test('hands them to a running organization', async () => {
+    const logger = new MqttLogger();
+    const seen = [];
+    logger.clients.dev = { setExtraForwarders: async (c) => seen.push(c) };
+    await logger.setForwarders('dev', [{ type: 'x' }]);
+    assert.deepEqual(seen, [[{ type: 'x' }]]);
+  });
+
+  test('keeps them for an organization that has not started yet', async () => {
+    const logger = new MqttLogger();
+    await logger.setForwarders('dev', [{ type: 'x' }]);
+    assert.deepEqual(logger.pendingForwarders.dev, [{ type: 'x' }]);
   });
 });

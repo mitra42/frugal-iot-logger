@@ -9,12 +9,13 @@
 
 import async from 'async'; // https://caolan.github.io/async/v3/docs.html
 import yaml from 'js-yaml'; // https://www.npmjs.com/package/js-yaml
-import { appendFile, appendFileSync, mkdir, mkdirSync, readFile, readFileSync, readdir } from "fs"; // https://nodejs.org/api/fs.html
+import { appendFile, appendFileSync, mkdir, mkdirSync, readFile, readFileSync, readdir, readdirSync, statSync } from "fs"; // https://nodejs.org/api/fs.html
 import mqtt from 'mqtt'; // https://www.npmjs.com/package/mqtt
 import nodepath from 'path'; // https://nodejs.org/api/path.html - "nodepath" because several
                              // functions here have a local variable called "path"
 import { initializeApp, getApps, cert } from 'firebase-admin/app'; // Firebase Admin SDK
 import { getDatabase } from 'firebase-admin/database';
+import { gunzipSync } from 'node:zlib';
 import { Client as OpenSearchClient } from '@opensearch-project/opensearch'; // OpenSearch, see class OpenSearch
 //import tospliced from 'array.prototype.tospliced'; // tospliced only in Node > 20 (and webstorm currently 18)
 
@@ -292,6 +293,11 @@ class MqttOrganization {
     this.projects = {};
     this.subscriptions = [];
     this.forwarders = []; // Forwarder instances, built from config_org.forwarders by forwardersSubscribe
+    // Forwarders handed over while running, in the same form as config_org.forwarders - frugal-iot-server
+    // keeps these in its database so an administrator can change them without editing YAML. They are
+    // added to the ones in the file, not instead of them. See setExtraForwarders.
+    this.extraForwarders = [];
+    this.forwardersStarted = false;
     this.currentValue = {}
     this.lastDate = {};
     this.lastValue = {};
@@ -707,25 +713,45 @@ class MqttOrganization {
   //       ...
   // There can be any number of each type.
   forwardersSubscribe() {
-    if (this.forwarders.length === 0) { // connect is called after onReconnect - do not re-add subscriptions
-      const o = this.config_org;
-      // The older per-type keys are no longer read. Say so, rather than let forwarding stop silently.
-      for (const legacy of ['gsheets', 'firebase']) {
-        if (o[legacy]) {
-          console.error(`org ${this.id}: "${legacy}:" is no longer supported and is being ignored - move it under "forwarders:" with "type: ${legacy === 'gsheets' ? 'gsheet' : 'firebase'}"`);
-        }
+    if (this.forwardersStarted) return; // connect is called after onReconnect - do not re-add subscriptions
+    this.forwardersStarted = true;
+    const o = this.config_org;
+    // The older per-type keys are no longer read. Say so, rather than let forwarding stop silently.
+    for (const legacy of ['gsheets', 'firebase']) {
+      if (o[legacy]) {
+        console.error(`org ${this.id}: "${legacy}:" is no longer supported and is being ignored - move it under "forwarders:" with "type: ${legacy === 'gsheets' ? 'gsheet' : 'firebase'}"`);
       }
-      for (const fconfig of (o.forwarders || [])) {
-        const FClass = FORWARDER_TYPES[fconfig && fconfig.type];
-        if (!FClass) {
-          console.error(`org ${this.id}: unknown forwarder type "${fconfig && fconfig.type}" - ignored. Known types: ${Object.keys(FORWARDER_TYPES).join(', ')}`);
-          continue;
-        }
+    }
+    for (const fconfig of [...(o.forwarders || []), ...this.extraForwarders]) {
+      const FClass = FORWARDER_TYPES[fconfig && fconfig.type];
+      if (!FClass) {
+        console.error(`org ${this.id}: unknown forwarder type "${fconfig && fconfig.type}" - ignored. Known types: ${Object.keys(FORWARDER_TYPES).join(', ')}`);
+        continue;
+      }
+      try {
         const f = new FClass(fconfig, this);
         this.forwarders.push(f);
         f.start();
+      } catch (err) {
+        // One forwarder failing to start (a bad URL, say) must not stop the others, or the logger
+        console.error(`org ${this.id}: forwarder ${fconfig.type} could not start:`, err.message);
       }
     }
+  }
+  // Replace the forwarders that did not come from the config file, and apply the change now: the
+  // ones running are stopped (OpenSearch sends what it has buffered first) and the new set started,
+  // without the MQTT connection, the CSV logging or any other organization being touched. Before the
+  // broker has connected there is nothing to stop, and forwardersSubscribe will use them when it does.
+  async setExtraForwarders(configs) {
+    this.extraForwarders = configs || [];
+    if (!this.forwardersStarted) return;
+    const old = this.forwarders;
+    this.forwarders = [];
+    this.forwardersStarted = false;
+    await Promise.all(old.map(async (f) => {
+      try { await f.stop(); } catch (err) { console.error(`org ${this.id}: forwarder did not stop cleanly:`, err.message); }
+    }));
+    this.forwardersSubscribe();
   }
   // A node that has moved to another project, so reportNodes stops listing it at its old address.
   forgetNode(projectId, nodeId) {
@@ -1233,6 +1259,71 @@ class OpenSearch extends Forwarder {
   }
 }
 
+// Load the CSV archive into OpenSearch: history from before a forwarder was switched on, or to fill a
+// gap while OpenSearch was down (the forwarder drops a batch it cannot send). Safe to repeat or to run
+// while the logger is live - a reading's id comes from its topic and time, so one already there is
+// replaced, not doubled. The forwarder's own "topics:" list is honoured.
+//
+//   config    the opensearch forwarder's settings, as for OpenSearch above
+//   org       which organization's directory under dataDir to read
+//   since     "YYYY-MM-DD", to skip older files
+//   dryRun    count what would be sent, and send nothing
+//   client    stands in for the OpenSearch client (tests)
+//   progress  called with the running total
+// Resolves to { sent, skippedFiles }.
+async function backfillOpenSearch({ config, org, dataDir: dir, since = '0000-00-00', dryRun = false, client, progress = () => {} }) {
+  const BATCH = 1000;
+  const f = new OpenSearch(config, { id: org });
+  if (client) { f.client = client; }
+  else if (!dryRun) { f.start(); f.stop(); await f.ready; } // builds the client and installs the template; the flush timer is not wanted
+  f.initialized = true;
+  const root = nodepath.join(dir, org);
+  if (!statSync(root, { throwIfNoEntry: false })) { throw new Error(`No ${root}`); }
+  // Every day file under data/<org>, as { topic, file }. The path below the data dir is the topic.
+  function* csvFiles(d) {
+    for (const entry of readdirSync(d, { withFileTypes: true })) {
+      const p = nodepath.join(d, entry.name);
+      if (entry.isDirectory()) { yield* csvFiles(p); }
+      else if (/^\d{4}-\d{2}-\d{2}\.csv(\.gz)?$/.test(entry.name) && entry.name.substring(0, 10) >= since) {
+        yield { topic: nodepath.relative(dir, d).split(nodepath.sep).join('/'), file: p };
+      }
+    }
+  }
+  // Lines are  1703318400000,"25.3"  - numbers come back as numbers, as the live forwarder sends them
+  function* readings(file) {
+    const raw = readFileSync(file);
+    const text = (file.endsWith('.gz') ? gunzipSync(raw) : raw).toString('utf8');
+    for (const line of text.split('\n')) {
+      const m = /^(\d+),"(.*)"$/.exec(line);
+      if (!m || m[2] === '') continue; // an empty message is how a retained topic is cleared - the live logger drops it too
+      const n = Number(m[2]);
+      yield { date: new Date(Number(m[1])), value: Number.isNaN(n) ? m[2] : n };
+    }
+  }
+  let docs = [], sent = 0, skippedFiles = 0;
+  const send = async () => {
+    if (docs.length === 0) return;
+    if (!dryRun) {
+      const res = await f.client.bulk({ body: openSearchBulkBody(f.indexPrefix, docs) });
+      const body = res.body || res;
+      if (body.errors) { console.error('Some readings were rejected, first:', JSON.stringify(body.items.find((i) => i.index?.error)?.index.error)); }
+    }
+    sent += docs.length;
+    docs = [];
+    progress(sent);
+  };
+  for (const { topic, file } of csvFiles(root)) {
+    if (!f.wanted(topic)) { skippedFiles++; continue; }
+    for (const { date, value } of readings(file)) {
+      const doc = openSearchDoc(date, topic, value);
+      if (doc) docs.push(doc);
+      if (docs.length >= BATCH) await send();
+    }
+  }
+  await send();
+  return { sent, skippedFiles };
+}
+
 // The values "type:" can take in an organization's forwarders list
 const FORWARDER_TYPES = {
   firebase: Firebase,
@@ -1243,6 +1334,15 @@ const FORWARDER_TYPES = {
 class MqttLogger {
   constructor() {
     this.clients = {};
+    this.pendingForwarders = {}; // orgId -> configs, for an organization not started yet
+  }
+
+  // Give an organization forwarders in addition to those in its config file - see
+  // MqttOrganization.setExtraForwarders. Safe to call before start(), and again whenever they change.
+  async setForwarders(orgId, configs) {
+    const org = this.clients[orgId];
+    if (org) { await org.setExtraForwarders(configs); }
+    else { this.pendingForwarders[orgId] = configs; }
   }
 
 
@@ -1739,6 +1839,7 @@ class MqttLogger {
     for (let [oid, oconfig] of Object.entries(this.config.organizations)) {
       let c = new MqttOrganization(oid, oconfig, this.config.mqtt, this.config.schema); // Will subscribe when connects
       this.clients[oid] = c;
+      if (this.pendingForwarders[oid]) { c.extraForwarders = this.pendingForwarders[oid]; }
       c.startClient();
     }
   }
@@ -1782,4 +1883,4 @@ const _test = {
   },
 };
 
-export { MqttLogger, MqttOrganization, _test };
+export { MqttLogger, MqttOrganization, backfillOpenSearch, _test };

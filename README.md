@@ -46,8 +46,13 @@ how to configure it.
 
 #### OpenSearch Integration
 Readings can be sent to OpenSearch, to browse in OpenSearch Dashboards or Grafana. One document is
-sent per reading, buffered and sent in bulk requests every `flushSeconds`. Add to an organization's
-`forwarders:` list:
+sent per reading, buffered and sent in bulk requests every `flushSeconds`, and only readings that were
+logged (passed the `log` and duplicates rules) are sent.
+
+Under frugal-iot-server, add it from the dashboard's **Forwarders** card - nothing to edit, and it
+applies at once. See frugal-iot-server's `INSTALL-OPENSEARCH.md`.
+
+A **standalone logger** (no server) takes the same settings in an organization's `forwarders:` list:
 
 ```yaml
 forwarders:
@@ -63,7 +68,8 @@ forwarders:
 ```
 
 History from before this was switched on, or a gap while OpenSearch was down, can be filled from the
-CSV files: `node scripts/backfill-opensearch.js --config <config dir> --org <org> --data <data dir>`
+CSV files. Under frugal-iot-server: `npx --no frugal-iot-backfill-opensearch <org>`. Standalone:
+`node scripts/backfill-opensearch.js --config <config dir> --org <org> --data <data dir>`
 (add `--dry-run` to count what would be sent).
 
 #### Firebase Integration
