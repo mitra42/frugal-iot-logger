@@ -1057,9 +1057,15 @@ class Gsheet extends Forwarder {
       sheet: this.config.sheet,
       row: row,
     }
-    // Now send with HTTP,
+    // Now send with HTTP. The address is a secret (anyone holding it can write to the sheet), so it is
+    // kept out of the log - only its host is named - and a redirect is never followed: the address is
+    // whatever an administrator typed, and one that answered "go to http://169.254.169.254/" would
+    // otherwise be taken at its word. Apps Script runs doPost and THEN redirects to the result page,
+    // so a 3xx here means it was received, not that it failed.
+    const host = (() => { try { return new URL(this.config.url).host; } catch { return 'the Google Sheets URL'; } })();
     fetch(this.config.url, {
       method: 'POST', // Specify the HTTP method as POST
+      redirect: 'manual',
       headers: {
         'Content-Type': 'application/json', // Indicate that the request body is JSON
       },
@@ -1067,8 +1073,8 @@ class Gsheet extends Forwarder {
     })
     // And check the result and report to console
     .then(response => {
-      if (!response.ok) {
-        throw new Error(`Failed to append to ${this.config.url} status: ${response.status}`);
+      if (!response.ok && !(response.status >= 300 && response.status < 400)) {
+        throw new Error(`Failed to append to ${host} status: ${response.status}`);
       }
     })
     /* -debugging
@@ -1076,7 +1082,8 @@ class Gsheet extends Forwarder {
       console.log('Success:', this.config.url, data); // Log the successful response data
     }) */
     .catch(error => {
-      console.error('Error:', error); // Log any errors during the fetch operation
+      // Log any errors during the fetch operation - the message, not the error object, which can carry the request
+      console.error('Error:', error && error.message, error && error.cause && error.cause.code || '');
     });
  }
 }

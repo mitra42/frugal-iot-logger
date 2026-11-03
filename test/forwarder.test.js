@@ -259,6 +259,42 @@ describe('Gsheet', () => {
     }
     assert.match(lines.join('\n'), /Failed to append/);
   });
+
+  const captureErrors = async (fn) => {
+    const lines = [];
+    const realError = console.error;
+    console.error = (...args) => lines.push(args.join(' '));
+    try { fn(); await new Promise((r) => setImmediate(r)); } finally { console.error = realError; }
+    return lines.join('\n');
+  };
+  const SECRET = 'https://script.google.com/macros/s/SECRETWEBHOOKID/exec';
+
+  test('never follows a redirect, since the address is whatever an administrator typed', () => {
+    let seen;
+    globalThis.fetch = (url, opts) => { seen = opts; return Promise.resolve({ ok: true }); };
+    new Gsheet({ url: SECRET, sheet: 'S', topics: [] }, org).tick();
+    assert.equal(seen.redirect, 'manual');
+  });
+
+  test('a redirect is not a failure - Apps Script runs the script and then redirects to the result', async () => {
+    globalThis.fetch = () => Promise.resolve({ ok: false, status: 302 });
+    const logged = await captureErrors(() => new Gsheet({ url: SECRET, sheet: 'S', topics: [] }, org).tick());
+    assert.equal(logged, '');
+  });
+
+  test('the address is a secret, so a failure names only its host', async () => {
+    globalThis.fetch = () => Promise.resolve({ ok: false, status: 500 });
+    const logged = await captureErrors(() => new Gsheet({ url: SECRET, sheet: 'S', topics: [] }, org).tick());
+    assert.match(logged, /script\.google\.com/);
+    assert.ok(!logged.includes('SECRETWEBHOOKID'));
+  });
+
+  test('nor does a network error give it away', async () => {
+    globalThis.fetch = () => Promise.reject(Object.assign(new Error('fetch failed'), { cause: { code: 'ECONNREFUSED' } }));
+    const logged = await captureErrors(() => new Gsheet({ url: SECRET, sheet: 'S', topics: [] }, org).tick());
+    assert.match(logged, /fetch failed ECONNREFUSED/);
+    assert.ok(!logged.includes('SECRETWEBHOOKID'));
+  });
 });
 
 describe('topicMatchesPattern', () => {
