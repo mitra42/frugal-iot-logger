@@ -440,6 +440,19 @@ describe('OpenSearch', () => {
     assert.equal(f.templateReq.body.template.settings.number_of_replicas, 0);
   });
 
+  test('says what OpenSearch answered, not just "Response Error"', async (t) => {
+    const errors = [];
+    t.mock.method(console, 'error', (...a) => errors.push(a.join(' ')));
+    const { f } = makeOs({}, async () => {
+      const err = new Error('Response Error');
+      err.meta = { statusCode: 401, body: { error: { type: 'security_exception', reason: 'no permissions for [indices:data/write/bulk]' } } };
+      throw err;
+    });
+    f.handleMessage(D, T, 1, true);
+    await f.flush();
+    assert.match(errors[0], /could not send 1 readings: HTTP 401: no permissions for \[indices:data\/write\/bulk\]/);
+  });
+
   test('carries on, with a message, if the template cannot be installed', async (t) => {
     const errors = [];
     t.mock.method(console, 'error', (...a) => errors.push(a.join(' ')));
@@ -447,6 +460,15 @@ describe('OpenSearch', () => {
     f.client = { indices: { putIndexTemplate: async () => { throw new Error('no'); } } };
     await f.ensureTemplate();
     assert.match(errors[0], /could not install the index template/);
+  });
+
+  test('an apiKey is sent as an Authorization header (the client ignores an apiKey option)', () => {
+    const f = new OpenSearch({ node: 'https://es.example:9200', apiKey: 'abc123' }, makeOrg());
+    f.start();
+    f.stop();
+    const sent = f.client.transport.headers;
+    assert.equal(sent.authorization, 'ApiKey abc123');
+    f.client.close();
   });
 
   test('flushSeconds sets the timer', () => {

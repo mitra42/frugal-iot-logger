@@ -1156,6 +1156,16 @@ function openSearchIndex(prefix, doc) {
 // The lines a bulk request is made of: an action line then the document, for each.
 // The id comes from topic and time so sending the same reading twice (a backfill that overlaps live
 // data, say) replaces it rather than doubling it.
+// The OpenSearch client's message for any HTTP error is just "Response Error"; what OpenSearch said
+// (401 not allowed in, 403 no permission, 400 not accepted, ...) is in err.meta
+function openSearchErrorText(err) {
+  const meta = err && err.meta;
+  if (!meta || !meta.statusCode) return err && err.message;
+  const body = meta.body;
+  const why = body && body.error ? (body.error.reason || body.error.type || JSON.stringify(body.error)) : (typeof body === 'string' ? body : '');
+  return `HTTP ${meta.statusCode}${why ? ': ' + String(why).slice(0, 300) : ''}`;
+}
+
 function openSearchBulkBody(prefix, docs) {
   return docs.flatMap((doc) => [
     { index: { _index: openSearchIndex(prefix, doc), _id: `${doc.topic}@${Date.parse(doc['@timestamp'])}` } },
@@ -1179,7 +1189,8 @@ class OpenSearch extends Forwarder {
       return;
     }
     const options = { node: this.config.node };
-    if (this.config.apiKey) { options.auth = { apiKey: this.config.apiKey }; }
+    // The client has no apiKey option of its own (it would be ignored and nothing sent), so say it as the header
+    if (this.config.apiKey) { options.headers = { Authorization: `ApiKey ${this.config.apiKey}` }; }
     else if (this.config.username) { options.auth = { username: this.config.username, password: this.config.password }; }
     if (this.config.ca) { options.ssl = { ca: readFileSync(this.config.ca) }; }
     if (this.config.insecure) { options.ssl = { ...options.ssl, rejectUnauthorized: false }; }
@@ -1214,7 +1225,7 @@ class OpenSearch extends Forwarder {
         },
       });
     } catch (err) {
-      console.error(`OpenSearch ${this.org.id}: could not install the index template, types will be guessed:`, err.message);
+      console.error(`OpenSearch ${this.org.id}: could not install the index template, types will be guessed:`, openSearchErrorText(err));
     }
   }
   stop() {
@@ -1259,7 +1270,7 @@ class OpenSearch extends Forwarder {
           JSON.stringify(failed[0] && failed[0].index.error));
       }
     } catch (err) {
-      console.error(`OpenSearch ${this.org.id}: could not send ${docs.length} readings:`, err.message);
+      console.error(`OpenSearch ${this.org.id}: could not send ${docs.length} readings:`, openSearchErrorText(err));
     } finally {
       this.sending = false;
     }
@@ -1311,7 +1322,9 @@ async function backfillOpenSearch({ config, org, dataDir: dir, since = '0000-00-
   const send = async () => {
     if (docs.length === 0) return;
     if (!dryRun) {
-      const res = await f.client.bulk({ body: openSearchBulkBody(f.indexPrefix, docs) });
+      let res;
+      try { res = await f.client.bulk({ body: openSearchBulkBody(f.indexPrefix, docs) }); }
+      catch (err) { throw new Error(`OpenSearch refused the readings: ${openSearchErrorText(err)}`); }
       const body = res.body || res;
       if (body.errors) { console.error('Some readings were rejected, first:', JSON.stringify(body.items.find((i) => i.index?.error)?.index.error)); }
     }
