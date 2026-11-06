@@ -383,6 +383,13 @@ heatsink:
       name: Heatsink Temperature
       min: 0
       max: 120
+# Seeed HM3301 particulate sensor ("Grove - Laser PM2.5 Sensor") - Sensor_HM3301.
+hm3301:
+  name: "HM3301"
+  topics:
+    - leaf: pm1
+    - leaf: pm25
+    - leaf: pm10
 ht:
   name: HT
   topics:
@@ -617,6 +624,12 @@ sector:
     - leaf: valve
       leaf_from: controlouttoggle
       name: Valve
+# Nova Fitness SDS011 particulate sensor, as in sensor.community's airRohr - Sensor_SDS011.
+sds011:
+  name: "SDS011"
+  topics:
+    - leaf: pm25
+    - leaf: pm10
 sht:
   name: SHT
   topics:

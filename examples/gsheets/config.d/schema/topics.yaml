@@ -549,6 +549,56 @@ percent:
     significantvalue: 1
   graphable:  true
   units:    "%"
+# Particulate matter, from the SDS011 or HM3301 - see sensor/pm.h in Frugal-IoT. Both are noisy,
+# and unreliable above ~70% humidity (they count droplets as particles). Only the HM3301 has pm1.
+pm1:
+  leaf:     pm1
+  name:     PM1.0
+  type:     float
+  display:  bar
+  min:      0
+  max:      100
+  width:    5
+  color:    "#d2691e"
+  units:    ug/m3
+  rw:       r
+  graphable:  true
+  log:      true
+  duplicates:
+    significantdate: 900000
+    significantvalue: 1
+pm10:
+  leaf:     pm10
+  name:     PM10
+  type:     float
+  display:  bar
+  min:      0
+  max:      200
+  width:    5
+  color:    "#696969"
+  units:    ug/m3
+  rw:       r
+  graphable:  true
+  log:      true
+  duplicates:
+    significantdate: 900000
+    significantvalue: 1
+pm25:
+  leaf:     pm25
+  name:     PM2.5
+  type:     float
+  display:  bar
+  min:      0
+  max:      100
+  width:    5
+  color:    "#a0522d"
+  units:    ug/m3
+  rw:       r
+  graphable:  true
+  log:      true
+  duplicates:
+    significantdate: 900000
+    significantvalue: 1
 position:
   leaf:     position
   name:     Position
