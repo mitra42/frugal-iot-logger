@@ -339,6 +339,7 @@ frugal_iot:
     - leaf:     id
     - leaf:     name
     - leaf:     description
+    - leaf:     location
     - leaf:     lastseen
 gps:
   name: GPS

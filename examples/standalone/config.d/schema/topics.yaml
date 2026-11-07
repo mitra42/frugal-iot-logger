@@ -411,6 +411,16 @@ loadcell:
   rw:       r
   calibrate:  true
   graphable:  true
+# "lat,lon" in one payload, so a pin is never moved half-way; set from the UI, held by the node
+location:
+  leaf:     location
+  slot:     location
+  name:     Location
+  type:     text
+  log:      false
+  display:  text
+  rw:       w
+  retain:   true
 longitude:
   leaf:     longitude
   name:     Longitude
