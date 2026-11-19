@@ -22,6 +22,9 @@ The main example of the loggers use - that we test against - is in the
 This combines this Logger with a simple HTTP server to serve up the 
 logged data and user interface.
 
+To develop the logger together with the server and client, see
+[Developing on the server, logger and client](https://github.com/mitra42/frugal-iot/wiki/Development-%E2%80%90-getting-setup#developing-on-the-server-logger-and-client) on the wiki.
+
 ### To install As a standalone server
 
 Copy https://github.com/mitra42/frugal-iot-logger/examples/standalone
