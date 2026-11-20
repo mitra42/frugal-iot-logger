@@ -284,6 +284,37 @@ describe('getPropertyValue and getDeviceCurrentValues', () => {
   });
 });
 
+describe('getNodeState', () => {
+  let logger;
+
+  beforeEach(() => {
+    logger = new MqttLogger();
+    const org = makeOrg();
+    org.currentValue = {
+      'dev/lotus/n1/sht/temperature': 25.3,
+      'dev/lotus/n1/sht/temperature/max': 30,
+      'dev/lotus/n1/sht/temperature/color': '#ff0000',
+      'dev/lotus/n1/sht/humidity/min': 40,
+      'dev/lotus/n1/set/relay/on': 1,
+      'dev/lotus/n10/sht/temperature': 99,
+      'dev/lotus/n1': 'quickdiscover',
+    };
+    logger.clients.dev = org;
+  });
+
+  test('each field with its value and its parameters, even one seen only as a parameter', () => {
+    assert.deepEqual(logger.getNodeState('dev', 'lotus', 'n1'), {
+      'sht/temperature': { value: 25.3, max: 30, color: '#ff0000' },
+      'sht/humidity': { min: 40 },
+    });
+  });
+
+  test('an unknown organization or node is empty', () => {
+    assert.deepEqual(logger.getNodeState('nosuchorg', 'lotus', 'n1'), {});
+    assert.deepEqual(logger.getNodeState('dev', 'lotus', 'n99'), {});
+  });
+});
+
 describe('sendAction', () => {
   let logger, published;
 

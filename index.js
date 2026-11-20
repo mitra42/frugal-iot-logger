@@ -104,7 +104,7 @@ function isDuplicate(date, topic, value, rules, lastdate, lastvalue) {
   return false; // No conditions or no rules (e.g. for discovery at org/project=node
 }
 // NOTE same function in frugal-iot-logger and frugal-iot-client if change here, change there
-function valueFromText(message, type) {
+function valueFromText(message, type, topic = '') {
   switch(type) {
     case "bool":
       if (message === "true") return 1;
@@ -131,7 +131,8 @@ function valueFromText(message, type) {
       // noinspection JSUnusedGlobalSymbols
       return yaml.load(message, {onWarning: (warn) => console.log('Yaml warning:', warn)});
     default:
-      XXX(`Unrecognized message type: ${type} in ${message}`);
+      // Naming the topic, or there is no telling which module is missing from config.d/schema/
+      XXX(`Unrecognized message type: ${type} in ${message}${topic ? ` on ${topic}` : ''}`);
       return undefined;
   }
 }
@@ -625,12 +626,17 @@ class MqttOrganization {
       return false;
     }
     if (topicPathArray.length > 4) {
-      //console.log("XXX rejecting message with parameters", topicPath);
+      // A parameter of a field - sht/temperature/max, .../min, .../color, .../wired. Never logged, but
+      // kept as the current value: a node's configured max is what "above its max" means to the
+      // MCP tools (frugal-iot-server issue #44), and nothing else on the server knows it. A number
+      // where it reads as one, since min and max are compared with readings, otherwise the text.
+      const n = Number(message);
+      this.currentValue[topicPath] = (message.trim() !== '' && Number.isFinite(n)) ? n : message;
       return false;
     } // Not logging parms
     // Find most granular type
     let type = this.findMostGranular(topicPathArray, "type", undefined);
-    let value = valueFromText(message, type);
+    let value = valueFromText(message, type, topicPath);
     // Save the current value whether logging or not
     this.currentValue[topicPath] = value;
     /*
@@ -1740,6 +1746,30 @@ class MqttLogger {
           result[fieldKey] = value;
         }
       });
+    });
+    return result;
+  }
+
+  /**
+   * Everything currently known about one node: each field's last value and its parameters (the
+   * node's own configured min, max, colour, wiring...), whether or not the schema knows the field.
+   * Unlike getDeviceCurrentValues, which reports only fields in the schema and no parameters.
+   * @param {string} org - Organization ID
+   * @param {string} project - Project ID
+   * @param {string} deviceId - Device ID
+   * @returns {Object} Map of "module/field" -> { value?, <parameter>: value, ... }
+   */
+  getNodeState(org, project, deviceId) {
+    const orgClient = this.clients[org];
+    if (!orgClient) { return {}; }
+    const prefix = `${org}/${project}/${deviceId}/`;
+    const result = {};
+    Object.entries(orgClient.currentValue).forEach(([topic, value]) => {
+      if (!topic.startsWith(prefix)) return;
+      const [ module, field, parameter, ...more ] = topic.slice(prefix.length).split('/');
+      if (!field || more.length || module === 'set') return;
+      const entry = (result[`${module}/${field}`] ||= {});
+      if (parameter) entry[parameter] = value; else entry.value = value;
     });
     return result;
   }

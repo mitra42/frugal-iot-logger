@@ -210,6 +210,15 @@ describe('shouldLog', () => {
       assert.equal(org.shouldLog(at(1000), 'dev/lotus/n1/sht/temperature/parm', '1', false), false);
     });
 
+    test('a parameter is not logged, but is remembered - a number where it is one', () => {
+      assert.equal(org.shouldLog(at(1000), 'dev/lotus/n1/sht/temperature/max', '30.5', false), false);
+      assert.equal(org.findLastValue('dev/lotus/n1/sht/temperature/max'), 30.5);
+      org.shouldLog(at(1000), 'dev/lotus/n1/sht/temperature/color', '#ff0000', false);
+      assert.equal(org.findLastValue('dev/lotus/n1/sht/temperature/color'), '#ff0000');
+      org.shouldLog(at(1000), 'dev/lotus/n1/sht/temperature/wired', ' ', false);
+      assert.equal(org.findLastValue('dev/lotus/n1/sht/temperature/wired'), ' ');
+    });
+
     test('a "set" command on its way to the device', () => {
       assert.equal(org.shouldLog(at(1000), 'dev/lotus/n1/set/relay/on', '1', false), false);
     });
